@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from nextx.signals import add_manual_signal, ingest_signals
+from nextx.records import update_frontmatter
 from nextx.vault import atomic_write_text, init_vault
 from nextx.views import render_today
 
@@ -77,6 +78,27 @@ class ViewTests(unittest.TestCase):
 
             self.assertNotEqual(view.read_text(encoding="utf-8"), "temporary view edit")
             self.assertIn("manual source note", signal.read_text(encoding="utf-8"))
+
+    def test_derived_index_is_rebuildable_and_invalidates_changed_files(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            ingest_signals(vault, collector_payload(2), collector="grok-build", now=BASE)
+
+            render_today(vault, now=BASE)
+            index = vault / ".nextx" / "index.json"
+            self.assertTrue(index.exists())
+
+            signal = vault / "01. Signal" / "x-5000.md"
+            update_frontmatter(signal, {"author_handle": "edited-author"})
+            render_today(vault, now=BASE)
+            self.assertIn(
+                "@edited-author",
+                (vault / "04. Views" / "Today.md").read_text(encoding="utf-8"),
+            )
+
+            index.write_text("[]", encoding="utf-8")
+            render_today(vault, now=BASE)
+            self.assertTrue(index.exists())
 
 
 if __name__ == "__main__":

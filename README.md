@@ -131,7 +131,7 @@ X 没有公开 Bookmark webhook，因此这是在线时 1–5 分钟准实时同
 02. Decision/   做 / 缓 / 毙及理由
 03. Artifact/   草稿、发布记录和 Outcome
 04. Views/      可重建的 Today、Bookmark Inbox、Decision Board、Weekly Review
-.nextx/         配置、状态、运行清单和写锁
+.nextx/         配置、状态、可重建索引、运行清单和写锁
 ```
 
 不要在 `04. Views/` 保存唯一信息，因为 View 会被重建覆盖。

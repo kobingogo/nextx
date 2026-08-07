@@ -109,7 +109,7 @@ Learn 是读取历史记录的周流程，不是第五个对象。Decision 的�
 
 ## 数据规模演进
 
-目标规模是单账号 10,000 Signal、2,000 Decision、2,000 Artifact。v0.1 直接扫描 Markdown；若真实机器上全量扫描持续超过 500ms，增加可完全重建的 `.nextx/index.json`。只有单 Vault 超过 100,000 条且 JSON 索引仍不足时，才考虑 SQLite 派生索引。Markdown 始终是权威源。
+目标规模是单账号 10,000 Signal、2,000 Decision、2,000 Artifact。10,000 条 Signal 的冷扫描实测为 546–696ms，越过 500ms 门槛，因此 v0.1 已加入可完全重建的 `.nextx/index.json`；它用文件修改时间和大小只重读新增或变化的 Markdown，增加一条 Signal 后的 Today 重建实测约 109ms。索引损坏或删除会自动重建。只有单 Vault 超过 100,000 条且 JSON 索引仍不足时，才考虑 SQLite 派生索引。Markdown 始终是权威源。
 
 多账号、独立前端、官方 X OAuth、自动 Outcome、MCP Server 等均由实际使用数据触发，不预埋空架构。
 

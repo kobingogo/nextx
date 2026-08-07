@@ -203,9 +203,9 @@ Projection builders
 
 ### 6.3 数据规模与演进门槛
 
-v0.1 直接扫描 Markdown，目标规模为单账号不超过 10,000 条 Signal、2,000 条 Decision 和 2,000 条 Artifact。在该规模下，按命令重建 Today/Weekly Projection 技术可行且故障面最小。
+目标规模为单账号不超过 10,000 条 Signal、2,000 条 Decision 和 2,000 条 Artifact。10,000 条 Signal 冷扫描实测为 546–696ms，已经超过 500ms 门槛，因此 v0.1 使用 `.nextx/index.json` 保存可重建的 frontmatter 派生索引；文件签名变化时只重读新增或修改的 Markdown，增加一条 Signal 后的 Today 重建实测约 109ms。
 
-只有实测全量扫描持续超过 500ms，才增加 `.nextx/index.json` 可重建索引；只有单 Vault 超过 100,000 条记录且 JSON 索引仍不够，才考虑 SQLite 派生索引。Markdown 始终是权威数据源，索引损坏后必须可完全重建。
+只有单 Vault 超过 100,000 条记录且 JSON 索引仍不够，才考虑 SQLite 派生索引。Markdown 始终是权威数据源，索引损坏或删除后自动重建。
 
 ### 6.4 可行性基线
 
@@ -381,6 +381,7 @@ Vault/
 └── .nextx/
     ├── config.json
     ├── state.json
+    ├── index.json
     ├── projections.json
     ├── runs/
     └── sync.lock/
