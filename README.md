@@ -150,6 +150,14 @@ X 没有公开 Bookmark webhook，因此这是在线时 1–5 分钟准实时同
 ## 排障
 
 - `doctor` 显示 `unsupported`：使用 Python 3.11+。
+- `pip install -e .` 在 `Installing build dependencies` 阶段报 `AttributeError: 'NoneType' object has no attribute 'get'`：这是旧版 pip 通过代理/证书访问 PyPI 时的环境错误，不是 NextX 代码错误。建议使用 Python 3.11+ 的虚拟环境，并让环境内的构建工具满足 `pyproject.toml`：
+
+  ```bash
+  /opt/homebrew/bin/python3.11 -m venv .venv
+  .venv/bin/python -m pip install -e . --quiet --no-build-isolation
+  ```
+
+  没有 Homebrew 时，把第一行替换为 `python3.11 -m venv .venv`。如果需要在线更新构建工具，先运行 `.venv/bin/python -m pip install --upgrade pip setuptools wheel`；公司代理环境应配置 `PIP_CERT=/absolute/path/to/company-ca.pem`，不要长期使用关闭 TLS 校验的参数。`--no-build-isolation` 只应在当前 venv 已有 `setuptools>=68` 时使用。
 - `twitter_binary: missing`：安装并认证兼容的 twitter-cli，再重跑 `doctor`。
 - Bookmark smoke 失败：先在终端直接确认 twitter-cli 登录状态；X 私有接口变化时暂用手动/Grok 导入。
 - Collector 被拒绝：用 `schemas/collector-envelope.v1.json` 校验版本、必填字段和 URL。
