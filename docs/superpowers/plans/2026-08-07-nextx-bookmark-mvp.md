@@ -1,5 +1,7 @@
 # NextX Bookmark MVP Implementation Plan
 
+> **已被完整产品计划取代。** 本文只作为 `Signal/Bookmarks` 子模块的历史实施记录；NextX 的交付边界以 `2026-08-07-nextx-complete-product-design.md` 和完整产品实施计划为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a local Python CLI that initializes a NextX Obsidian Vault, synchronizes the authenticated X account's bookmarks idempotently, and prepares one selected Signal for Agent-led deep analysis.
