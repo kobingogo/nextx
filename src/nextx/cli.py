@@ -13,6 +13,7 @@ from typing import Sequence
 
 from .bookmarks import parse_payload, sync_bookmarks
 from .self_model import ensure_self_templates
+from .signals import add_manual_signal, ingest_signals
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
 from .vault import init_vault, read_state
 
@@ -37,6 +38,23 @@ def _parser() -> argparse.ArgumentParser:
     sync.add_argument("--limit", type=int)
     sync.add_argument("--input-json", type=Path)
     sync.add_argument("--dry-run", action="store_true")
+
+    collect = subparsers.add_parser(
+        "collect", help="Collect or import Signals through a versioned contract"
+    )
+    collect.add_argument("--vault", required=True, type=Path)
+    collect.add_argument(
+        "--source", required=True, choices=("bookmarks", "grok", "twitter", "file")
+    )
+    collect.add_argument("--limit", type=int)
+    collect.add_argument("--input-json", type=Path)
+    collect.add_argument("--dry-run", action="store_true")
+
+    manual = subparsers.add_parser("add-signal", help="Capture a manual Signal")
+    manual.add_argument("--vault", required=True, type=Path)
+    manual.add_argument("--text", required=True)
+    manual.add_argument("--source-url")
+    manual.add_argument("--dry-run", action="store_true")
     return parser
 
 
@@ -107,6 +125,50 @@ def _sync_command(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def _collect_command(arguments: argparse.Namespace) -> dict[str, object]:
+    if arguments.source == "bookmarks":
+        result = _sync_command(arguments)
+        result["command"] = "collect"
+        result["source"] = "bookmarks"
+        return result
+    if arguments.input_json is None:
+        raise ValueError(f"--input-json is required for {arguments.source} collection")
+    payload = _load_input(arguments.input_json)
+    if not isinstance(payload, dict):
+        raise ValueError("Collector input must be a JSON object")
+    collector = payload.get("collector")
+    if not isinstance(collector, str) or not collector:
+        raise ValueError("Collector input must declare collector")
+    report = ingest_signals(
+        arguments.vault,
+        payload,
+        collector=collector,
+        dry_run=arguments.dry_run,
+    )
+    return {
+        "ok": True,
+        "command": "collect",
+        "source": arguments.source,
+        "vault": str(arguments.vault.expanduser().resolve()),
+        "report": asdict(report),
+    }
+
+
+def _manual_signal_command(arguments: argparse.Namespace) -> dict[str, object]:
+    report = add_manual_signal(
+        arguments.vault,
+        arguments.text,
+        arguments.source_url,
+        dry_run=arguments.dry_run,
+    )
+    return {
+        "ok": True,
+        "command": "add-signal",
+        "vault": str(arguments.vault.expanduser().resolve()),
+        "report": asdict(report),
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
@@ -117,8 +179,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             result, code = _doctor_command(
                 arguments.vault, smoke=not arguments.no_smoke
             )
-        else:
+        elif arguments.command == "sync-bookmarks":
             result = _sync_command(arguments)
+            code = 0
+        elif arguments.command == "collect":
+            result = _collect_command(arguments)
+            code = 0
+        else:
+            result = _manual_signal_command(arguments)
             code = 0
         _print_json(result)
         return code

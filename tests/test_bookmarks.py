@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from nextx.bookmarks import sync_bookmarks
+from nextx.records import read_frontmatter
 from nextx.vault import read_state
 
 
@@ -27,6 +28,10 @@ class BookmarkSyncTests(unittest.TestCase):
             self.assertEqual(report.created, 2)
             self.assertTrue(first.exists())
             self.assertIn('analysis_status: "pending"', first.read_text(encoding="utf-8"))
+            properties, _ = read_frontmatter(first)
+            self.assertEqual(properties["schema_version"], 1)
+            self.assertEqual(properties["account_key"], "primary")
+            self.assertEqual(properties["id"], "x:2084556671712477485")
             self.assertEqual(
                 read_state(vault)["seen_ids"],
                 ["2084556671712477485", "2084556671712477486"],

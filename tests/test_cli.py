@@ -10,6 +10,7 @@ from nextx.cli import main
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "bookmarks.json"
+GROK_FIXTURE = Path(__file__).parent / "fixtures" / "grok-signals.json"
 
 
 def run_cli(arguments):
@@ -50,6 +51,36 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertEqual(result["report"]["created"], 2)
             fetch.assert_not_called()
+
+    def test_collect_imports_grok_contract(self):
+        with TemporaryDirectory() as tmp:
+            code, stdout, stderr = run_cli(
+                [
+                    "collect",
+                    "--vault",
+                    tmp,
+                    "--source",
+                    "grok",
+                    "--input-json",
+                    str(GROK_FIXTURE),
+                ]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["report"]["created"], 2)
+
+    def test_add_signal_captures_manual_idea(self):
+        with TemporaryDirectory() as tmp:
+            code, stdout, stderr = run_cli(
+                ["add-signal", "--vault", tmp, "--text", "A manual idea"]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["report"]["created"], 1)
 
     def test_expected_failure_returns_json_only_on_stderr(self):
         with TemporaryDirectory() as tmp:

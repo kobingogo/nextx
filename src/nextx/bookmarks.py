@@ -142,6 +142,8 @@ def render_signal(bookmark: Bookmark, captured_at: datetime) -> str:
     captured_iso = captured_at.astimezone(timezone.utc).isoformat()
     frontmatter = [
         "---",
+        "schema_version: 1",
+        'account_key: "primary"',
         f"id: {_yaml(f'x:{bookmark.id}')}",
         'type: "signal"',
         'signal_type: "x_bookmark"',
@@ -151,7 +153,9 @@ def render_signal(bookmark: Bookmark, captured_at: datetime) -> str:
         f"author_name: {_yaml(bookmark.author_name)}",
         f"published_at: {_yaml(bookmark.published_at)}",
         f"captured_at: {_yaml(captured_iso)}",
+        f"retrieved_at: {_yaml(captured_iso)}",
         'collector: "twitter-cli"',
+        'source_confidence: "high"',
         "bookmark_active: true",
         'analysis_status: "pending"',
         f"media_types: {_yaml(media_types)}",

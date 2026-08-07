@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "account_key": "primary",
+  "collector": "grok-build",
+  "query": "AI agents",
+  "retrieved_at": "2026-08-07T10:00:00Z",
+  "items": [
+    {
+      "source_id": "x:3001",
+      "platform": "x",
+      "source_url": "https://x.com/alpha/status/3001",
+      "author_handle": "alpha",
+      "published_at": "2026-08-07T09:00:00Z",
+      "text": "A verifiable trend signal.",
+      "metrics": {"likes": 20, "reposts": 3, "replies": 2, "views": 400},
+      "media": [],
+      "source_confidence": "high",
+      "discovery_reason": "Matches the account's AI agent monitoring scope."
+    },
+    {
+      "platform": "x",
+      "source_url": "https://x.com/beta/status/3002",
+      "author_handle": "beta",
+      "published_at": "2026-08-07T08:00:00Z",
+      "text": "ID is derived from the canonical X URL.",
+      "metrics": {},
+      "media": [],
+      "source_confidence": "medium",
+      "discovery_reason": "New implementation angle."
+    }
+  ]
+}
