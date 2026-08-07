@@ -82,6 +82,28 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertEqual(result["report"]["created"], 1)
 
+    def test_today_renders_obisidian_view(self):
+        with TemporaryDirectory() as tmp:
+            run_cli(
+                [
+                    "collect",
+                    "--vault",
+                    tmp,
+                    "--source",
+                    "grok",
+                    "--input-json",
+                    str(GROK_FIXTURE),
+                ]
+            )
+
+            code, stdout, stderr = run_cli(["today", "--vault", tmp])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["automatic_count"], 2)
+            self.assertTrue((Path(tmp) / "04. Views" / "Today.md").exists())
+
     def test_expected_failure_returns_json_only_on_stderr(self):
         with TemporaryDirectory() as tmp:
             missing = Path(tmp) / "missing.json"

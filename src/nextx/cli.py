@@ -16,6 +16,7 @@ from .self_model import ensure_self_templates
 from .signals import add_manual_signal, ingest_signals
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
 from .vault import init_vault, read_state
+from .views import render_today
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -55,6 +56,9 @@ def _parser() -> argparse.ArgumentParser:
     manual.add_argument("--text", required=True)
     manual.add_argument("--source-url")
     manual.add_argument("--dry-run", action="store_true")
+
+    today = subparsers.add_parser("today", help="Rebuild the daily decision View")
+    today.add_argument("--vault", required=True, type=Path)
     return parser
 
 
@@ -185,8 +189,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif arguments.command == "collect":
             result = _collect_command(arguments)
             code = 0
-        else:
+        elif arguments.command == "add-signal":
             result = _manual_signal_command(arguments)
+            code = 0
+        else:
+            result = render_today(arguments.vault)
             code = 0
         _print_json(result)
         return code
