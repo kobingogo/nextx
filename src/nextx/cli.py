@@ -14,6 +14,7 @@ from typing import Sequence
 from .bookmarks import parse_payload, sync_bookmarks
 from .artifacts import artifact_brief, record_published, save_artifact
 from .decisions import decision_brief, save_decision
+from .learning import record_outcome, render_weekly_review
 from .self_model import ensure_self_templates
 from .signals import add_manual_signal, ingest_signals
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
@@ -90,6 +91,18 @@ def _parser() -> argparse.ArgumentParser:
     published.add_argument("--vault", required=True, type=Path)
     published.add_argument("artifact_id")
     published.add_argument("--url", required=True)
+
+    outcome = subparsers.add_parser(
+        "record-outcome", help="Record a 24h or 7d metric snapshot"
+    )
+    outcome.add_argument("--vault", required=True, type=Path)
+    outcome.add_argument("artifact_id")
+    outcome.add_argument("--input-json", required=True, type=Path)
+
+    weekly = subparsers.add_parser(
+        "weekly-review", help="Rebuild the weekly learning View"
+    )
+    weekly.add_argument("--vault", required=True, type=Path)
     return parser
 
 
@@ -249,10 +262,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif arguments.command == "save-artifact":
             result = _save_artifact_command(arguments)
             code = 0
-        else:
+        elif arguments.command == "record-published":
             result = record_published(
                 arguments.vault, arguments.artifact_id, arguments.url
             )
+            code = 0
+        elif arguments.command == "record-outcome":
+            result = record_outcome(
+                arguments.vault,
+                arguments.artifact_id,
+                _load_input(arguments.input_json),
+            )
+            code = 0
+        else:
+            result = render_weekly_review(arguments.vault)
             code = 0
         _print_json(result)
         return code

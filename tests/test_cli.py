@@ -172,6 +172,41 @@ class CLITests(unittest.TestCase):
             self.assertEqual(publish_stderr, "")
             self.assertEqual(json.loads(publish_stdout)["status"], "published")
 
+            outcome_file = Path(tmp) / "outcome.json"
+            outcome_file.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "account_key": "primary",
+                        "window": "7d",
+                        "views": 700,
+                        "likes": 30,
+                        "replies": 4,
+                        "reposts": 6,
+                        "bookmarks": 8,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            outcome_code, outcome_stdout, _ = run_cli(
+                [
+                    "record-outcome",
+                    "--vault",
+                    tmp,
+                    artifact_id,
+                    "--input-json",
+                    str(outcome_file),
+                ]
+            )
+            review_code, review_stdout, _ = run_cli(
+                ["weekly-review", "--vault", tmp]
+            )
+
+            self.assertEqual(outcome_code, 0)
+            self.assertEqual(json.loads(outcome_stdout)["status"], "measured")
+            self.assertEqual(review_code, 0)
+            self.assertTrue(Path(json.loads(review_stdout)["view"]).exists())
+
     def test_expected_failure_returns_json_only_on_stderr(self):
         with TemporaryDirectory() as tmp:
             missing = Path(tmp) / "missing.json"

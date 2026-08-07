@@ -147,7 +147,9 @@ def save_artifact(
 
 ## Outcome
 
+<!-- nextx-outcomes:start -->
 尚未发布。
+<!-- nextx-outcomes:end -->
 """
     init_vault(vault)
     with vault_lock(vault):
