@@ -4,6 +4,10 @@ NextX 是本地优先的 X 运营决策工作台：收集热点、对标帖、�
 
 当前是单账号 v0.1。Agent 对话是主操作入口，Obsidian 是数据与看板，`nextx` CLI 是确定性执行内核。没有独立前端，也不会自动发帖。
 
+## 项目状态
+
+当前完成、受阻和待办任务统一维护在 [NextX 任务台账](docs/TASKS.md)。`docs/superpowers/plans/` 保留历史实施上下文，不代表实时进度。
+
 ## 能力
 
 - Grok Build 热点发现和统一 JSON 导入。
