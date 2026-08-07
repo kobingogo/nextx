@@ -139,3 +139,20 @@ def render_today(
         "automatic_count": len(automatic),
         "selected_ids": [str(properties.get("id")) for _, properties in selected],
     }
+
+
+def render_decision_board(vault: Path) -> Path:
+    vault = vault.expanduser().resolve()
+    decisions = _records(vault / "02. Decision", "decision")
+    groups: dict[str, list[str]] = {"do": [], "defer": [], "kill": []}
+    for path, properties in decisions:
+        verdict = str(properties.get("verdict"))
+        if verdict in groups:
+            angle = properties.get("angle") or properties.get("reason_code") or "无标题"
+            groups[verdict].append(f"- [[{path.stem}|{angle}]]")
+    sections = []
+    for verdict, title in (("do", "做"), ("defer", "缓"), ("kill", "毙")):
+        sections.append(f"## {title}\n\n" + ("\n".join(groups[verdict]) or "- 无"))
+    path = vault / "04. Views" / "Decision Board.md"
+    atomic_write_text(path, "# Decision Board\n\n" + "\n\n".join(sections) + "\n")
+    return path

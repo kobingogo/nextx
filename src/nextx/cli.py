@@ -12,11 +12,12 @@ import sys
 from typing import Sequence
 
 from .bookmarks import parse_payload, sync_bookmarks
+from .decisions import decision_brief, save_decision
 from .self_model import ensure_self_templates
 from .signals import add_manual_signal, ingest_signals
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
 from .vault import init_vault, read_state
-from .views import render_today
+from .views import render_decision_board, render_today
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -59,6 +60,18 @@ def _parser() -> argparse.ArgumentParser:
 
     today = subparsers.add_parser("today", help="Rebuild the daily decision View")
     today.add_argument("--vault", required=True, type=Path)
+
+    brief = subparsers.add_parser(
+        "decision-brief", help="Prepare one Signal for topic-engine"
+    )
+    brief.add_argument("--vault", required=True, type=Path)
+    brief.add_argument("signal_id")
+
+    decision = subparsers.add_parser(
+        "save-decision", help="Validate and persist a do/defer/kill Decision"
+    )
+    decision.add_argument("--vault", required=True, type=Path)
+    decision.add_argument("--input-json", required=True, type=Path)
     return parser
 
 
@@ -173,6 +186,13 @@ def _manual_signal_command(arguments: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def _save_decision_command(arguments: argparse.Namespace) -> dict[str, object]:
+    result = save_decision(arguments.vault, _load_input(arguments.input_json))
+    render_decision_board(arguments.vault)
+    render_today(arguments.vault)
+    return result
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
@@ -192,8 +212,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif arguments.command == "add-signal":
             result = _manual_signal_command(arguments)
             code = 0
-        else:
+        elif arguments.command == "today":
             result = render_today(arguments.vault)
+            code = 0
+        elif arguments.command == "decision-brief":
+            result = decision_brief(arguments.vault, arguments.signal_id)
+            code = 0
+        else:
+            result = _save_decision_command(arguments)
             code = 0
         _print_json(result)
         return code

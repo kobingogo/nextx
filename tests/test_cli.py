@@ -11,6 +11,7 @@ from nextx.cli import main
 
 FIXTURE = Path(__file__).parent / "fixtures" / "bookmarks.json"
 GROK_FIXTURE = Path(__file__).parent / "fixtures" / "grok-signals.json"
+DECISION_FIXTURE = Path(__file__).parent / "fixtures" / "decision-do.json"
 
 
 def run_cli(arguments):
@@ -103,6 +104,25 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertEqual(result["automatic_count"], 2)
             self.assertTrue((Path(tmp) / "04. Views" / "Today.md").exists())
+
+    def test_decision_brief_and_save_decision(self):
+        with TemporaryDirectory() as tmp:
+            run_cli(
+                ["collect", "--vault", tmp, "--source", "grok", "--input-json", str(GROK_FIXTURE)]
+            )
+
+            brief_code, brief_stdout, _ = run_cli(
+                ["decision-brief", "--vault", tmp, "x:3001"]
+            )
+            save_code, save_stdout, save_stderr = run_cli(
+                ["save-decision", "--vault", tmp, "--input-json", str(DECISION_FIXTURE)]
+            )
+
+            self.assertEqual(brief_code, 0)
+            self.assertIn("topic-engine", json.loads(brief_stdout)["brief"])
+            self.assertEqual(save_code, 0)
+            self.assertEqual(save_stderr, "")
+            self.assertEqual(json.loads(save_stdout)["verdict"], "do")
 
     def test_expected_failure_returns_json_only_on_stderr(self):
         with TemporaryDirectory() as tmp:

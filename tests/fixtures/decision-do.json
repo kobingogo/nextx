@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "account_key": "primary",
+  "signal_ids": ["x:3001"],
+  "verdict": "do",
+  "reason_code": "timely_self_fit",
+  "reason": "Verified, timely, and aligned with the account.",
+  "angle": "Why local agents change X operations",
+  "evidence_sufficient": true,
+  "original_value": "Connect the signal to a local decision loop.",
+  "risk": "Metrics may change after capture.",
+  "recommended_format": "single-post",
+  "research_summary": "A verified X post demonstrates the shift.",
+  "why_now": "The discussion is active now.",
+  "why_self": "It matches the account's agent content pillar."
+}
