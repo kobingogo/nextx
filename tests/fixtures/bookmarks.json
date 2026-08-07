@@ -1,0 +1,53 @@
+{
+  "ok": true,
+  "schema_version": "1",
+  "data": [
+    {
+      "id": "2084556671712477485",
+      "text": "Example bookmarked post",
+      "author": {
+        "id": "10",
+        "name": "Example",
+        "screenName": "example"
+      },
+      "metrics": {
+        "likes": 58,
+        "retweets": 2,
+        "replies": 3,
+        "quotes": 1,
+        "views": 80373,
+        "bookmarks": 28
+      },
+      "createdAtISO": "2026-08-04T08:26:54+00:00",
+      "media": [
+        {
+          "type": "video",
+          "url": "https://video.example/item.mp4",
+          "width": 1080,
+          "height": 1920
+        }
+      ],
+      "urls": []
+    },
+    {
+      "id": "2084556671712477486",
+      "text": "Second post",
+      "author": {
+        "id": "11",
+        "name": "Second",
+        "screenName": "second"
+      },
+      "metrics": {
+        "likes": 4,
+        "retweets": 0,
+        "replies": 1,
+        "quotes": 0,
+        "views": 100,
+        "bookmarks": 2
+      },
+      "createdAtISO": "2026-08-05T08:26:54+00:00",
+      "media": [],
+      "urls": ["https://example.com/source"]
+    }
+  ]
+}
