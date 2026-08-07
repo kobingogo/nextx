@@ -21,6 +21,9 @@
 - Limit Today to 10 automatic plus 2 manual Signals.
 - Keep all Agent/model calls outside the Python core.
 - No Web UI, database, Obsidian plugin, custom daemon, MCP server, multi-account framework, or speculative provider factory.
+- Every public JSON envelope and CLI response carries `schema_version: 1`.
+- Every record carries `account_key: "primary"`; v0.1 exposes no multi-account behavior.
+- Markdown is authoritative; Views and future indexes are rebuildable projections.
 
 ---
 
@@ -65,6 +68,7 @@
 - [ ] Implement the smallest line-based frontmatter reader/updater for NextX-generated files; do not implement general YAML.
 - [ ] Write Self bootstrap tests proving first init creates five templates and second init preserves a manual edit.
 - [ ] Implement concise templates with onboarding questions, no generated strategy claims.
+- [ ] Create `.nextx/config.json` with `schema_version: 1` and `account_key: "primary"`; preserve it on repeated init.
 - [ ] Run all tests and commit: `feat: bootstrap Self and shared records`.
 
 ---
@@ -76,6 +80,7 @@
 - Create: `tests/fixtures/grok-signals.json`
 - Create: `tests/test_signals.py`
 - Create: `prompts/grok-collector.md`
+- Create: `schemas/collector-envelope.v1.json`
 - Modify: `src/nextx/cli.py`
 - Modify: `src/nextx/bookmarks.py`
 
@@ -93,6 +98,8 @@
 - [ ] Test normalized Grok import, cross-run deduplication by `source_id`, URL-derived X IDs, manual SHA-256 IDs, whole-batch validation, and dry-run.
 - [ ] Run tests and confirm failure before implementation.
 - [ ] Implement one generic JSON contract without collector classes or a provider registry.
+- [ ] Validate the versioned envelope and persist `schema_version` plus `account_key` on every Signal.
+- [ ] Add a contract test that loads `schemas/collector-envelope.v1.json` and verifies its required fields match the parser without a JSON Schema runtime dependency.
 - [ ] Make Bookmarks write the same common Signal frontmatter fields while preserving its richer media body.
 - [ ] Write `prompts/grok-collector.md` requiring verifiable X URLs, exact quotes only when present, confidence, discovery reason, and the shared JSON shape.
 - [ ] Run all tests and commit: `feat: ingest multi-source signals`.
@@ -227,6 +234,7 @@
 - [ ] Run one real Bookmark `--dry-run`; do not persist the user's private bookmark text in the repository.
 - [ ] Run `plutil -lint examples/com.nextx.bookmarks.plist` and `git diff --check`.
 - [ ] Review all commands for any X write verb; there must be none.
+- [ ] Generate 10,000 fixture Signal files in a temporary Vault and measure Today rebuild; document the elapsed time. Do not add an index unless it exceeds 500ms on this machine.
 - [ ] Commit any verification-proven fixes separately.
 
 ---

@@ -165,6 +165,59 @@ Decision 统计
 
 NextX 不复制现有两个内容 Skill 的提示词和判断规则。
 
+### 6.1 技术架构原则
+
+NextX 采用**模块化单体 + 进程外 Collector 契约**：核心仍是一个易安装的本地 CLI，但领域规则、文件存储、采集适配、视图投影和 Agent Brief 具有明确边界。这样既能在首版快速落地，也能在不迁移用户 Markdown 的前提下替换任一外部能力。
+
+现代化不等于引入更多基础设施。首版明确采用：
+
+- Python 3.11+ 类型标注、dataclass、`pathlib`、结构化 JSON 输出和标准打包。
+- 版本化 JSON Schema 作为 Agent、Grok 和 Collector 的跨语言契约。
+- 原子文件写入、幂等键、显式状态机和可重建 Projection。
+- Capability-based `doctor`，区分“已安装、已认证、真实读取成功”。
+- 契约测试、状态机测试和完整纵向测试。
+- `uv tool`、`pipx` 或普通 venv 均可安装；运行时不绑定某个 Agent 厂商。
+
+明确不采用微服务、事件总线、Redis、远程数据库、容器编排或长期运行的自研 Worker。对单账号、每日十余条候选而言，这些技术不会改善正确性或速度。
+
+### 6.2 可替换边界
+
+```text
+Agent UX
+  -> versioned CLI JSON
+Application services
+  -> typed domain records and state machines
+Markdown repository
+  -> Obsidian filesystem
+Collector process contract
+  -> Grok / twitter-cli / official X API / future tools
+Projection builders
+  -> Today / Decision Board / Weekly Review
+```
+
+- Agent 更换：不改变 Vault 和领域记录。
+- Collector 更换：只需输出 `collector-envelope.v1`。
+- Obsidian 更换：Markdown 仍可直接使用；未来可新增其他 Repository Adapter。
+- 数据量增加：先增加可重建本地索引，不改变原始 Markdown。
+- 多账号增加：记录已带 `account_key`，未来再开放账号选择和隔离规则。
+
+### 6.3 数据规模与演进门槛
+
+v0.1 直接扫描 Markdown，目标规模为单账号不超过 10,000 条 Signal、2,000 条 Decision 和 2,000 条 Artifact。在该规模下，按命令重建 Today/Weekly Projection 技术可行且故障面最小。
+
+只有实测全量扫描持续超过 500ms，才增加 `.nextx/index.json` 可重建索引；只有单 Vault 超过 100,000 条记录且 JSON 索引仍不够，才考虑 SQLite 派生索引。Markdown 始终是权威数据源，索引损坏后必须可完全重建。
+
+### 6.4 可行性基线
+
+| 能力 | 当前可行路径 | 已知边界 |
+|---|---|---|
+| Bookmarks | 本机已实测 twitter-cli 0.8.5 可读正文、作者、指标和媒体 | 私有 GraphQL 可能随 X 变化；无 Bookmark 推送事件 |
+| 准实时同步 | launchd/systemd 每 180 秒调用一次性命令 | 电脑休眠时暂停，恢复后补拉 |
+| 热点发现 | Grok Build 运行研究并输出版本化 JSON | 必须保留可验证 URL，摘要不能替代证据 |
+| 精确账号/帖子 | agent-reach 路由 twitter-cli | 依赖当前账号认证和 X 风控 |
+| 深度拆解 | Codex/Claude/Grok 读取单条 Analysis Brief | 选择的内容会发送给模型提供方 |
+| Obsidian | 标准 Markdown/frontmatter/双向链接 | Views 可覆盖重建，不在 View 中存权威数据 |
+
 ## 7. Collector 设计
 
 ### 统一采集契约
@@ -173,6 +226,8 @@ NextX 不复制现有两个内容 Skill 的提示词和判断规则。
 
 ```json
 {
+  "schema_version": 1,
+  "account_key": "primary",
   "collector": "grok-build",
   "query": "AI agents",
   "retrieved_at": "2026-08-07T10:00:00Z",
@@ -192,6 +247,8 @@ NextX 不复制现有两个内容 Skill 的提示词和判断规则。
   ]
 }
 ```
+
+`schemas/collector-envelope.v1.json` 是公开契约。Collector 可以是 Python 模块、任意语言 CLI 或 Agent 工作流；NextX 不要求它们链接核心代码，只要求 stdout 或导入文件符合契约。
 
 没有可验证 URL 或原帖 ID 的 Grok 结论只能作为低置信观察，不能单独支撑 `do` Decision。
 
@@ -324,6 +381,7 @@ Vault/
 └── .nextx/
     ├── config.json
     ├── state.json
+    ├── projections.json
     ├── runs/
     └── sync.lock/
 ```
@@ -352,6 +410,8 @@ nextx weekly-review --vault PATH
 为兼容已经验证的命令，`sync-bookmarks` 保留为 `collect --source bookmarks` 的别名。
 
 所有命令成功时向 stdout 输出一个 JSON 对象，预期失败时向 stderr 输出一个 JSON 对象并返回非零退出码。
+
+CLI 输出同样带 `schema_version`，保持 Agent 调用向后可判定。破坏性格式变化必须提升主版本；新增可选字段不提升主版本。
 
 ## 14. Agent Skill
 
@@ -386,6 +446,7 @@ NextX/
 ├── src/nextx/          # 标准库 Python CLI
 ├── skills/nextx/       # canonical Agent Skill
 ├── prompts/            # Grok 采集与分析契约
+├── schemas/            # versioned JSON contracts
 ├── templates/          # Self/Signal/Decision/Artifact Markdown
 ├── examples/           # launchd/systemd 调度示例
 ├── docs/               # 产品、架构、贡献和安全文档
@@ -393,6 +454,17 @@ NextX/
 ```
 
 建议正式公开时采用 Apache-2.0。任何来自 AGPL 项目的代码不进入本仓库；只独立实现通用产品模式。
+
+### 扩展策略
+
+首版只稳定四类扩展点：
+
+1. Collector Envelope：新增信号来源。
+2. Repository boundary：未来增加索引或其他 Markdown 工作区。
+3. Projection builder：增加新视图，不改变权威记录。
+4. Agent Skill：增加新的推理工作流，不改变 CLI 数据契约。
+
+不提供任意 Python 插件加载、动态代码执行或配置驱动的类工厂；开源贡献者通过明确模块和契约扩展，安全性和可测试性更高。
 
 ## 17. v0.1 纵向验收
 
