@@ -12,6 +12,7 @@ import sys
 from typing import Sequence
 
 from .bookmarks import parse_payload, sync_bookmarks
+from .analysis import build_analysis_brief
 from .artifacts import artifact_brief, record_published, save_artifact
 from .decisions import decision_brief, save_decision
 from .learning import record_outcome, render_weekly_review
@@ -68,6 +69,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     brief.add_argument("--vault", required=True, type=Path)
     brief.add_argument("signal_id")
+
+    analysis = subparsers.add_parser(
+        "analysis-brief", help="Prepare one Signal for deep decomposition"
+    )
+    analysis.add_argument("--vault", required=True, type=Path)
+    analysis.add_argument("signal_id")
 
     decision = subparsers.add_parser(
         "save-decision", help="Validate and persist a do/defer/kill Decision"
@@ -252,6 +259,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             code = 0
         elif arguments.command == "decision-brief":
             result = decision_brief(arguments.vault, arguments.signal_id)
+            code = 0
+        elif arguments.command == "analysis-brief":
+            result = build_analysis_brief(arguments.vault, arguments.signal_id)
             code = 0
         elif arguments.command == "save-decision":
             result = _save_decision_command(arguments)
