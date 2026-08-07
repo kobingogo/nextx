@@ -12,6 +12,7 @@ import sys
 from typing import Sequence
 
 from .bookmarks import parse_payload, sync_bookmarks
+from .artifacts import artifact_brief, record_published, save_artifact
 from .decisions import decision_brief, save_decision
 from .self_model import ensure_self_templates
 from .signals import add_manual_signal, ingest_signals
@@ -72,6 +73,23 @@ def _parser() -> argparse.ArgumentParser:
     )
     decision.add_argument("--vault", required=True, type=Path)
     decision.add_argument("--input-json", required=True, type=Path)
+
+    artifact_brief_parser = subparsers.add_parser(
+        "artifact-brief", help="Prepare a do Decision for x-tweet-writer"
+    )
+    artifact_brief_parser.add_argument("--vault", required=True, type=Path)
+    artifact_brief_parser.add_argument("decision_id")
+
+    artifact = subparsers.add_parser("save-artifact", help="Persist a selected draft")
+    artifact.add_argument("--vault", required=True, type=Path)
+    artifact.add_argument("--input-json", required=True, type=Path)
+
+    published = subparsers.add_parser(
+        "record-published", help="Record an already-published X URL"
+    )
+    published.add_argument("--vault", required=True, type=Path)
+    published.add_argument("artifact_id")
+    published.add_argument("--url", required=True)
     return parser
 
 
@@ -193,6 +211,10 @@ def _save_decision_command(arguments: argparse.Namespace) -> dict[str, object]:
     return result
 
 
+def _save_artifact_command(arguments: argparse.Namespace) -> dict[str, object]:
+    return save_artifact(arguments.vault, _load_input(arguments.input_json))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
@@ -218,8 +240,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif arguments.command == "decision-brief":
             result = decision_brief(arguments.vault, arguments.signal_id)
             code = 0
-        else:
+        elif arguments.command == "save-decision":
             result = _save_decision_command(arguments)
+            code = 0
+        elif arguments.command == "artifact-brief":
+            result = artifact_brief(arguments.vault, arguments.decision_id)
+            code = 0
+        elif arguments.command == "save-artifact":
+            result = _save_artifact_command(arguments)
+            code = 0
+        else:
+            result = record_published(
+                arguments.vault, arguments.artifact_id, arguments.url
+            )
             code = 0
         _print_json(result)
         return code

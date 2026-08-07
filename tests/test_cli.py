@@ -124,6 +124,54 @@ class CLITests(unittest.TestCase):
             self.assertEqual(save_stderr, "")
             self.assertEqual(json.loads(save_stdout)["verdict"], "do")
 
+    def test_artifact_brief_save_and_publish_record(self):
+        with TemporaryDirectory() as tmp:
+            run_cli(
+                ["collect", "--vault", tmp, "--source", "grok", "--input-json", str(GROK_FIXTURE)]
+            )
+            _, decision_stdout, _ = run_cli(
+                ["save-decision", "--vault", tmp, "--input-json", str(DECISION_FIXTURE)]
+            )
+            decision_id = json.loads(decision_stdout)["id"]
+            draft_file = Path(tmp) / "artifact.json"
+            draft_file.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "account_key": "primary",
+                        "decision_id": decision_id,
+                        "format": "single-post",
+                        "draft": "A validated draft.",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            brief_code, brief_stdout, _ = run_cli(
+                ["artifact-brief", "--vault", tmp, decision_id]
+            )
+            save_code, save_stdout, _ = run_cli(
+                ["save-artifact", "--vault", tmp, "--input-json", str(draft_file)]
+            )
+            artifact_id = json.loads(save_stdout)["id"]
+            publish_code, publish_stdout, publish_stderr = run_cli(
+                [
+                    "record-published",
+                    "--vault",
+                    tmp,
+                    artifact_id,
+                    "--url",
+                    "https://x.com/example/status/7001",
+                ]
+            )
+
+            self.assertEqual(brief_code, 0)
+            self.assertIn("x-tweet-writer", json.loads(brief_stdout)["brief"])
+            self.assertEqual(save_code, 0)
+            self.assertEqual(publish_code, 0)
+            self.assertEqual(publish_stderr, "")
+            self.assertEqual(json.loads(publish_stdout)["status"], "published")
+
     def test_expected_failure_returns_json_only_on_stderr(self):
         with TemporaryDirectory() as tmp:
             missing = Path(tmp) / "missing.json"
