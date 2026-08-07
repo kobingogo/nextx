@@ -8,6 +8,8 @@ NextX 是本地优先的 X 运营决策工作台：收集热点、对标帖、�
 
 当前完成、受阻和待办任务统一维护在 [NextX 任务台账](docs/TASKS.md)。`docs/superpowers/plans/` 保留历史实施上下文，不代表实时进度。
 
+安装、初始化、完整 fixture 验收、真实 X 验收和日常运营步骤见 [NextX 操作手册](docs/OPERATIONS.md)。
+
 ## 能力
 
 - Grok Build 热点发现和统一 JSON 导入。
