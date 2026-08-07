@@ -30,7 +30,7 @@ Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第�
 
 | 能力 | 关键代码 | 当前实现程度 |
 | --- | --- | --- |
-| CLI 与安装 | `pyproject.toml`、`src/nextx/cli.py` | 可编辑安装；所有成功/失败输出结构化 JSON |
+| CLI 与安装 | `pyproject.toml`、`src/nextx/cli.py`、`skills/nextx/scripts/bootstrap.py` | 一键创建用户级 Python 3.11+ 环境、安装构建依赖和 NextX；所有成功/失败输出结构化 JSON |
 | Vault 与 Self | `vault.py`、`records.py`、`self_model.py` | 初始化五个 Self 模板；Markdown frontmatter 是权威数据；原子写入和单 Vault 写锁 |
 | Signal 采集 | `signals.py`、`schemas/collector-envelope.v1.json` | Grok 文件导入、任意契约采集器导入、手动文本；整批校验、URL/ID/hash 去重 |
 | X Bookmarks | `bookmarks.py`、`twitter_cli.py` | 读取 `twitter bookmarks --json`，初次最多 200、增量默认 50、dry-run、运行清单、幂等入库 |
@@ -51,7 +51,7 @@ Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第�
 3. **Bookmarks 是在线准实时轮询。** X 没有公开 Bookmark webhook，launchd 在线时每 180 秒调用一次；休眠期间暂停。
 4. **Outcome 是手动回填。** 代码验证 24h/7d 格式和非负指标，但不会凭空读取 X 指标。
 5. **真实 Bookmark 当前有环境阻塞。** 如果 twitter-cli Cookie 提取失败，fixture 测试仍可通过，但真实 smoke/dry-run 不能算完成。
-6. **`doctor` 当前是 Bookmark 能力门。** 即使只使用 Grok/手动 Signal，没有 `twitter` 二进制也会让 `doctor` 返回非零；这是当前实现的保守检查策略。
+6. **`twitter-cli` 是可选能力。** `doctor --no-smoke` 在没有 `twitter` 二进制时仍可通过；只有真实 smoke 检查才要求 Bookmark 能力完整。
 
 当前任务状态以 [docs/TASKS.md](TASKS.md) 为准。
 
@@ -71,9 +71,32 @@ Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第�
 - `x-tweet-writer`：三温度推文写作。
 - Codex CLI 或 Claude Code：运行 canonical Agent Skill。
 
-## 4. 推荐安装方式
+## 4. 推荐安装方式：一键安装
 
-### 4.1 使用 Homebrew Python（macOS 推荐）
+在仓库根目录执行：
+
+```bash
+python3 skills/nextx/scripts/bootstrap.py
+```
+
+安装器会：
+
+1. 选择当前可用的 Python 3.11+；
+2. 在 `~/.local/share/nextx/venv` 创建用户级隔离环境；
+3. 源码仓库创建指向 `src/` 的隔离 launcher（无需网络）；发布版 Skill 安装/升级 `pip`、`setuptools`、`wheel` 后安装 `nextx-workbench`；
+4. 输出可直接调用的 `nextx` 绝对路径。
+
+安装器不写系统 Python、不写 Vault、不安装或认证 `twitter-cli`。源码 launcher 会随仓库代码更新而生效；发布版 Skill 没有源码时才走 pip 包安装。
+
+可先检查而不写入：
+
+```bash
+python3 skills/nextx/scripts/bootstrap.py --dry-run
+```
+
+### 4.1 手动开发安装（备用）
+
+#### 使用 Homebrew Python（macOS 推荐）
 
 ```bash
 cd /Users/bingo/workspace/NextX
@@ -127,14 +150,21 @@ python -c "import setuptools; print(setuptools.__version__)"
 
 ## 5. 初始化 Vault 与 Self
 
-设置 Vault 路径。不要把 Vault 直接放在代码仓库里，除非你明确希望一并版本管理内容。
+默认 Vault 是 `~/Documents/NextX`，不存在会自动创建。直接运行：
 
 ```bash
-export NEXTX_VAULT="/absolute/path/to/NextX Vault"
-
-"$NEXTX" init --vault "$NEXTX_VAULT"
-"$NEXTX" doctor --vault "$NEXTX_VAULT" --no-smoke
+"$NEXTX" setup --runtime "$NEXTX_RUNTIME"
+"$NEXTX" doctor --no-smoke
 ```
+
+其中 `NEXTX_RUNTIME` 使用 bootstrap JSON 中的 `runtime`。需要改路径时只配置一次：
+
+```bash
+"$NEXTX" setup --vault "/absolute/path/to/NextX Vault" --runtime "$NEXTX_RUNTIME"
+"$NEXTX" config --show
+```
+
+以后命令可省略 `--vault`。如需临时切换，可使用 `NEXTX_VAULT=/path nextx today`；显式 `--vault` 优先级最高。
 
 初始化后打开该目录作为 Obsidian Vault，填写：
 
@@ -159,7 +189,7 @@ export NEXTX_VAULT="/absolute/path/to/NextX Vault"
 PYTHONPATH="$NEXTX_ROOT/src" "$NEXTX_PYTHON" -m unittest discover -s "$NEXTX_ROOT/tests" -v
 ```
 
-当前基线应为 **47 项测试全部通过**。测试覆盖：Vault 锁、frontmatter、Self、Signal、Bookmarks 解析与幂等、CLI JSON、Today、Analysis、Decision、Artifact、Outcome、Weekly Review、索引重建和 twitter-cli 失败路径。
+当前基线应为 **57 项测试全部通过**。测试覆盖：Vault 锁、frontmatter、Self、Signal、Bookmarks 解析与幂等、CLI JSON、默认 Vault 配置、bootstrap dry-run/launcher、自愈、Today、Analysis、Decision、Artifact、Outcome、Weekly Review、索引重建和 twitter-cli 失败路径。
 
 macOS 调度模板还要验证：
 
@@ -490,7 +520,7 @@ launchctl bootout "gui/$(id -u)/com.nextx.bookmarks"
 
 1. `nextx --help` 正常。
 2. `nextx init` 能创建 Vault 和 Self 模板。
-3. 47 项测试全部通过。
+3. 57 项测试全部通过。
 4. fixture 纵向流程能生成 Decision、Artifact、measured Outcome 和 Weekly Review。
 5. `doctor --no-smoke` 通过。
 6. 如果要启用 Bookmark 轮询，真实 `doctor` smoke 和 Bookmark dry-run 也必须通过。

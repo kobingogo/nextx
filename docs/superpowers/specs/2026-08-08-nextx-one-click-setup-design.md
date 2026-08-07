@@ -1,6 +1,6 @@
 # NextX 一键安装与初始化设计
 
-**状态：** 待用户复核  
+**状态：** 已实施，待真实环境验收  
 **目标版本：** v0.2 setup experience  
 **默认 Vault：** `~/Documents/NextX`
 
@@ -52,8 +52,8 @@ nextx config [--show]
 Skill 触发初始化时执行一个最小 bootstrap 流程：
 
 1. 优先使用当前可执行的 `nextx`。
-2. 否则寻找 Python 3.11+，创建用户级运行时目录（默认 `~/.local/share/nextx/venv`），安装 NextX 包。
-3. 开发仓库中从当前源码安装；发布 Skill 中从正式包源安装。
+2. 否则寻找 Python 3.11+，创建用户级运行时目录（默认 `~/.local/share/nextx/venv`）。
+3. 开发仓库中创建指向当前 `src/` 的隔离 launcher；发布 Skill 中从正式包源安装并准备构建依赖。
 4. 安装失败时返回明确的 Python 版本、pip、构建依赖或证书原因，不静默修改系统 Python。
 
 Bootstrap 不安装或认证 `twitter-cli`。它只检测该命令是否存在，并把 Bookmark 作为可选能力报告。
@@ -64,7 +64,7 @@ Bootstrap 不安装或认证 `twitter-cli`。它只检测该命令是否存在�
 
 `skills/nextx/SKILL.md` 增加 setup 路由：
 
-- 用户说“初始化/安装/配置 NextX”时，先执行 bootstrap，再执行 `nextx setup --yes`。
+- 用户说“初始化/安装/配置 NextX”时，先执行 bootstrap，再执行 `nextx setup --runtime RUNTIME --yes`。
 - 没有指定路径时使用 `~/Documents/NextX`，不存在则创建。
 - 只在配置不存在且用户希望改路径时提问；配置已有时不重复询问。
 - setup 完成后自动运行 `nextx doctor --no-smoke`，并把缺失的 twitter-cli 作为可选阻塞，不阻止 Grok、手动 Signal、Decision 和 Artifact 工作流。
@@ -80,7 +80,8 @@ Skill 仍保持人工闸门：不自动发帖、不自动修改 Playbook、不�
 {
   "schema_version": 1,
   "vault": "/Users/<user>/Documents/NextX",
-  "runtime": "/Users/<user>/.local/share/nextx/venv"
+  "runtime": "/Users/<user>/.local/share/nextx/venv",
+  "setup_at": "2026-08-08T00:00:00+00:00"
 }
 ```
 
@@ -102,7 +103,7 @@ Skill 仍保持人工闸门：不自动发帖、不自动修改 Playbook、不�
 3. 未传 `--vault` 的 `today`、`collect`、`weekly-review` 能解析默认配置路径。
 4. `NEXTX_VAULT` 和显式 `--vault` 能覆盖默认路径。
 5. 配置损坏、Python 不满足版本、pip 安装失败和 twitter-cli 缺失都有可操作错误。
-6. 现有 47 项测试保持通过，并新增 setup、路径优先级、幂等和 Skill 路由测试。
+6. 现有测试保持通过，并新增 setup、路径优先级、幂等、bootstrap 和 Skill 路由测试（当前 57 项）。
 7. 真实 Bookmark 认证仍是可选外部步骤，不影响非 X 采集流程。
 
 ## 9. 不做的事情

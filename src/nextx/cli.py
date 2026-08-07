@@ -14,6 +14,7 @@ from typing import Sequence
 from .bookmarks import parse_payload, sync_bookmarks
 from .analysis import build_analysis_brief
 from .artifacts import artifact_brief, record_published, save_artifact
+from .config import config_snapshot, resolve_vault, setup_vault
 from .decisions import decision_brief, save_decision
 from .learning import record_outcome, render_weekly_review
 from .self_model import ensure_self_templates
@@ -29,17 +30,25 @@ def _parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    setup = subparsers.add_parser("setup", help="Install the default local Vault configuration")
+    setup.add_argument("--vault", type=Path)
+    setup.add_argument("--runtime", type=Path)
+    setup.add_argument("--yes", action="store_true", help="Run non-interactively")
+
+    config = subparsers.add_parser("config", help="Show resolved local configuration")
+    config.add_argument("--show", action="store_true", help="Show resolved configuration")
+
     init = subparsers.add_parser("init", help="Initialize a NextX Obsidian Vault")
-    init.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(init)
 
     doctor = subparsers.add_parser("doctor", help="Check local bookmark capability")
-    doctor.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(doctor)
     doctor.add_argument("--no-smoke", action="store_true")
 
     sync = subparsers.add_parser(
         "sync-bookmarks", help="Synchronize X Bookmarks into Signal notes"
     )
-    sync.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(sync)
     sync.add_argument("--limit", type=int)
     sync.add_argument("--input-json", type=Path)
     sync.add_argument("--dry-run", action="store_true")
@@ -47,7 +56,7 @@ def _parser() -> argparse.ArgumentParser:
     collect = subparsers.add_parser(
         "collect", help="Collect or import Signals through a versioned contract"
     )
-    collect.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(collect)
     collect.add_argument(
         "--source", required=True, choices=("bookmarks", "grok", "twitter", "file")
     )
@@ -56,61 +65,69 @@ def _parser() -> argparse.ArgumentParser:
     collect.add_argument("--dry-run", action="store_true")
 
     manual = subparsers.add_parser("add-signal", help="Capture a manual Signal")
-    manual.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(manual)
     manual.add_argument("--text", required=True)
     manual.add_argument("--source-url")
     manual.add_argument("--dry-run", action="store_true")
 
     today = subparsers.add_parser("today", help="Rebuild the daily decision View")
-    today.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(today)
 
     brief = subparsers.add_parser(
         "decision-brief", help="Prepare one Signal for topic-engine"
     )
-    brief.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(brief)
     brief.add_argument("signal_id")
 
     analysis = subparsers.add_parser(
         "analysis-brief", help="Prepare one Signal for deep decomposition"
     )
-    analysis.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(analysis)
     analysis.add_argument("signal_id")
 
     decision = subparsers.add_parser(
         "save-decision", help="Validate and persist a do/defer/kill Decision"
     )
-    decision.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(decision)
     decision.add_argument("--input-json", required=True, type=Path)
 
     artifact_brief_parser = subparsers.add_parser(
         "artifact-brief", help="Prepare a do Decision for x-tweet-writer"
     )
-    artifact_brief_parser.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(artifact_brief_parser)
     artifact_brief_parser.add_argument("decision_id")
 
     artifact = subparsers.add_parser("save-artifact", help="Persist a selected draft")
-    artifact.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(artifact)
     artifact.add_argument("--input-json", required=True, type=Path)
 
     published = subparsers.add_parser(
         "record-published", help="Record an already-published X URL"
     )
-    published.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(published)
     published.add_argument("artifact_id")
     published.add_argument("--url", required=True)
 
     outcome = subparsers.add_parser(
         "record-outcome", help="Record a 24h or 7d metric snapshot"
     )
-    outcome.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(outcome)
     outcome.add_argument("artifact_id")
     outcome.add_argument("--input-json", required=True, type=Path)
 
     weekly = subparsers.add_parser(
         "weekly-review", help="Rebuild the weekly learning View"
     )
-    weekly.add_argument("--vault", required=True, type=Path)
+    _add_vault_argument(weekly)
     return parser
+
+
+def _add_vault_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--vault",
+        type=Path,
+        help="Vault path; defaults to NEXTX_VAULT, saved config, or ~/Documents/NextX",
+    )
 
 
 def _print_json(value: object, *, stream=None) -> None:
@@ -131,8 +148,8 @@ def _init_command(vault: Path) -> dict[str, object]:
     }
 
 
-def _doctor_command(vault: Path, *, smoke: bool) -> tuple[dict[str, object], int]:
-    vault = vault.expanduser().resolve()
+def _doctor_command(vault: Path | None, *, smoke: bool) -> tuple[dict[str, object], int]:
+    vault = resolve_vault(vault)
     vault_ready = vault.is_dir() and os.access(vault, os.W_OK)
     twitter_ready = shutil.which("twitter") is not None
     checks: dict[str, object] = {
@@ -151,8 +168,8 @@ def _doctor_command(vault: Path, *, smoke: bool) -> tuple[dict[str, object], int
     ready = (
         checks["python"] == "ready"
         and checks["vault"] == "ready"
-        and checks["twitter_binary"] == "ready"
-        and checks["bookmark_smoke"] in {"ready", "skipped"}
+        and (not smoke or checks["twitter_binary"] == "ready")
+        and (not smoke or checks["bookmark_smoke"] in {"ready", "skipped"})
     )
     return {"ok": ready, "command": "doctor", "checks": checks}, 0 if ready else 1
 
@@ -162,7 +179,7 @@ def _load_input(path: Path) -> object:
 
 
 def _sync_command(arguments: argparse.Namespace) -> dict[str, object]:
-    vault: Path = arguments.vault.expanduser().resolve()
+    vault = resolve_vault(arguments.vault)
     state = read_state(vault)
     default_limit = 50 if state.get("last_success_at") else 200
     limit = arguments.limit if arguments.limit is not None else default_limit
@@ -195,7 +212,7 @@ def _collect_command(arguments: argparse.Namespace) -> dict[str, object]:
     if not isinstance(collector, str) or not collector:
         raise ValueError("Collector input must declare collector")
     report = ingest_signals(
-        arguments.vault,
+        resolve_vault(arguments.vault),
         payload,
         collector=collector,
         dry_run=arguments.dry_run,
@@ -204,14 +221,14 @@ def _collect_command(arguments: argparse.Namespace) -> dict[str, object]:
         "ok": True,
         "command": "collect",
         "source": arguments.source,
-        "vault": str(arguments.vault.expanduser().resolve()),
+        "vault": str(resolve_vault(arguments.vault)),
         "report": asdict(report),
     }
 
 
 def _manual_signal_command(arguments: argparse.Namespace) -> dict[str, object]:
     report = add_manual_signal(
-        arguments.vault,
+        resolve_vault(arguments.vault),
         arguments.text,
         arguments.source_url,
         dry_run=arguments.dry_run,
@@ -219,27 +236,34 @@ def _manual_signal_command(arguments: argparse.Namespace) -> dict[str, object]:
     return {
         "ok": True,
         "command": "add-signal",
-        "vault": str(arguments.vault.expanduser().resolve()),
+        "vault": str(resolve_vault(arguments.vault)),
         "report": asdict(report),
     }
 
 
 def _save_decision_command(arguments: argparse.Namespace) -> dict[str, object]:
-    result = save_decision(arguments.vault, _load_input(arguments.input_json))
-    render_decision_board(arguments.vault)
-    render_today(arguments.vault)
+    vault = resolve_vault(arguments.vault)
+    result = save_decision(vault, _load_input(arguments.input_json))
+    render_decision_board(vault)
+    render_today(vault)
     return result
 
 
 def _save_artifact_command(arguments: argparse.Namespace) -> dict[str, object]:
-    return save_artifact(arguments.vault, _load_input(arguments.input_json))
+    return save_artifact(resolve_vault(arguments.vault), _load_input(arguments.input_json))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     try:
         if arguments.command == "init":
-            result = _init_command(arguments.vault)
+            result = _init_command(resolve_vault(arguments.vault))
+            code = 0
+        elif arguments.command == "setup":
+            result = setup_vault(arguments.vault, runtime=arguments.runtime)
+            code = 0
+        elif arguments.command == "config":
+            result = config_snapshot()
             code = 0
         elif arguments.command == "doctor":
             result, code = _doctor_command(
@@ -255,37 +279,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = _manual_signal_command(arguments)
             code = 0
         elif arguments.command == "today":
-            result = render_today(arguments.vault)
+            result = render_today(resolve_vault(arguments.vault))
             code = 0
         elif arguments.command == "decision-brief":
-            result = decision_brief(arguments.vault, arguments.signal_id)
+            result = decision_brief(resolve_vault(arguments.vault), arguments.signal_id)
             code = 0
         elif arguments.command == "analysis-brief":
-            result = build_analysis_brief(arguments.vault, arguments.signal_id)
+            result = build_analysis_brief(resolve_vault(arguments.vault), arguments.signal_id)
             code = 0
         elif arguments.command == "save-decision":
             result = _save_decision_command(arguments)
             code = 0
         elif arguments.command == "artifact-brief":
-            result = artifact_brief(arguments.vault, arguments.decision_id)
+            result = artifact_brief(resolve_vault(arguments.vault), arguments.decision_id)
             code = 0
         elif arguments.command == "save-artifact":
             result = _save_artifact_command(arguments)
             code = 0
         elif arguments.command == "record-published":
             result = record_published(
-                arguments.vault, arguments.artifact_id, arguments.url
+                resolve_vault(arguments.vault), arguments.artifact_id, arguments.url
             )
             code = 0
         elif arguments.command == "record-outcome":
             result = record_outcome(
-                arguments.vault,
+                resolve_vault(arguments.vault),
                 arguments.artifact_id,
                 _load_input(arguments.input_json),
             )
             code = 0
         else:
-            result = render_weekly_review(arguments.vault)
+            result = render_weekly_review(resolve_vault(arguments.vault))
             code = 0
         _print_json(result)
         return code

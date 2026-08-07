@@ -7,28 +7,30 @@ description: Run the local-first NextX editorial workbench for one X account. Us
 
 Operate NextX through its deterministic CLI and keep Markdown as the source of truth. Use Agent reasoning only at the explicit analysis, decision, and writing gates.
 
-## Establish context
+## Install and establish context
 
-1. Resolve the user's NextX Vault path. Ask only when it cannot be inferred from the request or current project.
-2. Run `nextx doctor --vault PATH --no-smoke` before the first collection in a session. Run the smoke check only when the user asks to verify live Bookmark access.
-3. Read only the selected Self or record files needed for the current step. Never send the whole Vault or Bookmark archive to a model.
+1. If this is the first use, run `python3 skills/nextx/scripts/bootstrap.py` and use the JSON `executable` it returns for all following commands. The script creates a user-scoped Python 3.11+ runtime and never installs or authenticates `twitter-cli`.
+2. Run `<nextx> setup --runtime RUNTIME` once, where `RUNTIME` is the bootstrap JSON value (omit it if no runtime was returned). It creates the default `~/Documents/NextX` Vault and Self templates, is idempotent, and preserves manual Markdown. Use `setup --vault PATH` once to choose another Vault.
+3. Run `<nextx> doctor --no-smoke` before the first collection in a session. Missing `twitter-cli` is an optional warning in this mode; run the smoke check only when the user asks to verify live Bookmark access.
+4. Commands may omit `--vault` after setup. Resolution is explicit `--vault`, `NEXTX_VAULT`, saved user config, then `~/Documents/NextX`.
+5. Read only the selected Self or record files needed for the current step. Never send the whole Vault or Bookmark archive to a model.
 
 ## Route the request
 
 | Intent | Action |
 | --- | --- |
-| Initialize | Run `nextx init --vault PATH`; ask the user to complete `00. Self/*.md`. |
-| Discover trends with Grok | Give Grok Build `prompts/grok-collector.md`, save its JSON result, then run `nextx collect --vault PATH --source grok --input-json FILE`. |
-| Sync Bookmarks | Run `nextx collect --vault PATH --source bookmarks`; use `--dry-run` for a first live check. |
-| Import another collector | Require `schemas/collector-envelope.v1.json`, then run `nextx collect --vault PATH --source twitter\|file --input-json FILE`. |
-| Capture an idea | Run `nextx add-signal --vault PATH --text TEXT [--source-url URL]`. |
-| Build today's queue | Run `nextx today --vault PATH`; present the selected IDs and `04. Views/Today.md`. |
-| Deeply analyze one post | Run `nextx analysis-brief --vault PATH SIGNAL_ID`, analyze only that Brief, and separate fact, source opinion, and inference. Do not save a Decision unless requested. |
-| Decide do/defer/kill | Run `nextx decision-brief --vault PATH SIGNAL_ID`; invoke the installed `topic-engine`; save its JSON with `nextx save-decision --vault PATH --input-json FILE`. |
-| Draft a do Decision | Run `nextx artifact-brief --vault PATH DECISION_ID`; invoke the installed `x-tweet-writer`; let the user choose the final version; save only that version with `nextx save-artifact --vault PATH --input-json FILE`. |
-| Record publication | Only after the user has published and supplied the status URL, run `nextx record-published --vault PATH ARTIFACT_ID --url URL`. |
-| Record metrics | Build a 24h or 7d Outcome JSON and run `nextx record-outcome --vault PATH ARTIFACT_ID --input-json FILE`. |
-| Review the week | Run `nextx weekly-review --vault PATH`; discuss the observations and at most five proposals. Change `Playbook.md` only after explicit approval of one experiment. |
+| Initialize | Run `<nextx> setup --runtime RUNTIME --yes` using bootstrap's runtime (omit when unavailable); ask the user to complete `00. Self/*.md`. |
+| Discover trends with Grok | Give Grok Build `prompts/grok-collector.md`, save its JSON result, then run `<nextx> collect --source grok --input-json FILE`. |
+| Sync Bookmarks | Run `<nextx> collect --source bookmarks`; use `--dry-run` for a first live check. |
+| Import another collector | Require `schemas/collector-envelope.v1.json`, then run `<nextx> collect --source twitter\|file --input-json FILE`. |
+| Capture an idea | Run `<nextx> add-signal --text TEXT [--source-url URL]`. |
+| Build today's queue | Run `<nextx> today`; present the selected IDs and `04. Views/Today.md`. |
+| Deeply analyze one post | Run `<nextx> analysis-brief SIGNAL_ID`, analyze only that Brief, and separate fact, source opinion, and inference. Do not save a Decision unless requested. |
+| Decide do/defer/kill | Run `<nextx> decision-brief SIGNAL_ID`; invoke the installed `topic-engine`; save its JSON with `<nextx> save-decision --input-json FILE`. |
+| Draft a do Decision | Run `<nextx> artifact-brief DECISION_ID`; invoke the installed `x-tweet-writer`; let the user choose the final version; save only that version with `<nextx> save-artifact --input-json FILE`. |
+| Record publication | Only after the user has published and supplied the status URL, run `<nextx> record-published ARTIFACT_ID --url URL`. |
+| Record metrics | Build a 24h or 7d Outcome JSON and run `<nextx> record-outcome ARTIFACT_ID --input-json FILE`. |
+| Review the week | Run `<nextx> weekly-review`; discuss the observations and at most five proposals. Change `Playbook.md` only after explicit approval of one experiment. |
 
 Use `sync-bookmarks` only as the backward-compatible alias for Bookmark collection.
 

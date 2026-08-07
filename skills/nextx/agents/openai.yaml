@@ -1,4 +1,4 @@
 interface:
   display_name: "NextX Workbench"
   short_description: "Run the local-first X editorial decision loop"
-  default_prompt: "Use $nextx to run today’s X signal-to-draft workflow."
+  default_prompt: "Use $nextx to install or initialize NextX, then run today’s X signal-to-draft workflow."

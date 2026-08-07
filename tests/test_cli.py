@@ -23,6 +23,29 @@ def run_cli(arguments):
 
 
 class CLITests(unittest.TestCase):
+    def test_setup_and_config_work_without_vault_argument(self):
+        with TemporaryDirectory() as tmp:
+            config_home = Path(tmp) / "config"
+            vault = Path(tmp) / "vault"
+            with patch.dict(
+                "os.environ",
+                {"XDG_CONFIG_HOME": str(config_home), "NEXTX_VAULT": str(vault)},
+                clear=True,
+            ):
+                setup_code, setup_stdout, setup_stderr = run_cli(["setup", "--yes"])
+                config_code, config_stdout, config_stderr = run_cli(["config", "--show"])
+                today_code, today_stdout, today_stderr = run_cli(["today"])
+
+            self.assertEqual(setup_code, 0)
+            self.assertEqual(setup_stderr, "")
+            self.assertTrue(json.loads(setup_stdout)["ok"])
+            self.assertEqual(config_code, 0)
+            self.assertEqual(config_stderr, "")
+            self.assertEqual(json.loads(config_stdout)["vault"], str(vault.resolve()))
+            self.assertEqual(today_code, 0)
+            self.assertEqual(today_stderr, "")
+            self.assertTrue(Path(json.loads(today_stdout)["view"]).exists())
+
     def test_init_returns_json(self):
         with TemporaryDirectory() as tmp:
             code, stdout, stderr = run_cli(["init", "--vault", tmp])
@@ -239,6 +262,17 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result["checks"]["twitter_binary"], "ready")
             self.assertEqual(result["checks"]["bookmark_smoke"], "skipped")
             fetch.assert_not_called()
+
+    @patch("nextx.cli.shutil.which", return_value=None)
+    def test_doctor_without_smoke_allows_optional_twitter_to_be_missing(self, _which):
+        with TemporaryDirectory() as tmp:
+            code, stdout, stderr = run_cli(["doctor", "--vault", tmp, "--no-smoke"])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["checks"]["twitter_binary"], "missing")
 
 
 if __name__ == "__main__":

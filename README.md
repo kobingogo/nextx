@@ -21,12 +21,21 @@ NextX 是本地优先的 X 运营决策工作台：收集热点、对标帖、�
 
 ## 安装
 
-要求 Python 3.11+。Obsidian 是推荐界面，但不是运行依赖。
+推荐直接运行 canonical Skill 自带的自举安装器。它会创建用户级 Python 3.11+ 隔离环境并安装/挂接 NextX；本项目没有第三方运行时依赖。Obsidian 是推荐界面，但不是运行依赖。
+
+```bash
+python3 skills/nextx/scripts/bootstrap.py
+```
+
+命令输出 JSON，其中 `executable` 是可直接调用的 `nextx` 绝对路径。源码仓库使用隔离环境中的 source launcher，发布版 Skill 才通过 pip 安装构建依赖和 `nextx-workbench`。安装器不会修改系统 Python，也不会自动安装或认证 `twitter-cli`。
+
+源码开发环境仍可手动安装：
 
 ```bash
 python3.11 -m venv .venv
 . .venv/bin/activate
-python -m pip install -e .
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e . --no-build-isolation
 nextx --help
 ```
 
@@ -35,9 +44,18 @@ Bookmarks 还需要已经登录的 `twitter-cli`；选题与写作工作流需�
 ## 首次配置
 
 ```bash
-nextx init --vault "/absolute/path/to/NextX Vault"
-nextx doctor --vault "/absolute/path/to/NextX Vault" --no-smoke
+nextx setup
+nextx doctor --no-smoke
 ```
+
+默认 Vault 为 `~/Documents/NextX`，不存在会自动创建；需要改路径时只需配置一次：
+
+```bash
+nextx setup --vault "/absolute/path/to/NextX Vault"
+nextx config --show
+```
+
+初始化后所有命令都可以省略 `--vault`。解析优先级为显式参数、`NEXTX_VAULT`、用户配置文件（`~/.config/nextx/config.json`，遵循 `XDG_CONFIG_HOME`）和默认路径。`nextx init --vault PATH` 仍保留作为底层兼容命令。
 
 随后在 Obsidian 完成：
 
@@ -56,7 +74,7 @@ nextx doctor --vault "/absolute/path/to/NextX Vault" --no-smoke
 把 `prompts/grok-collector.md` 交给 Grok Build，让它输出符合 `schemas/collector-envelope.v1.json` 的 JSON，保存为本地文件后导入：
 
 ```bash
-nextx collect --vault "$NEXTX_VAULT" --source grok --input-json /path/to/grok.json
+nextx collect --source grok --input-json /path/to/grok.json
 ```
 
 NextX 故意采用文件/进程契约，而不绑定未稳定的 Grok Build SDK。换采集 Agent 时无需迁移 Vault。
@@ -66,13 +84,13 @@ NextX 故意采用文件/进程契约，而不绑定未稳定的 Grok Build SDK�
 第一次先验证，不写入：
 
 ```bash
-nextx collect --vault "$NEXTX_VAULT" --source bookmarks --limit 1 --dry-run
+nextx collect --source bookmarks --limit 1 --dry-run
 ```
 
 正式同步：
 
 ```bash
-nextx collect --vault "$NEXTX_VAULT" --source bookmarks
+nextx collect --source bookmarks
 ```
 
 初次默认读取 200 条，后续默认 50 条；同一个 tweet ID 不重复建文件。`sync-bookmarks` 是兼容别名。
@@ -80,7 +98,7 @@ nextx collect --vault "$NEXTX_VAULT" --source bookmarks
 ### 手动 Signal
 
 ```bash
-nextx add-signal --vault "$NEXTX_VAULT" --text "一个待验证的想法" --source-url "https://x.com/user/status/123"
+nextx add-signal --text "一个待验证的想法" --source-url "https://x.com/user/status/123"
 ```
 
 ## 每日工作流
