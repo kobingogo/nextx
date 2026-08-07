@@ -12,6 +12,7 @@ import sys
 from typing import Sequence
 
 from .bookmarks import parse_payload, sync_bookmarks
+from .self_model import ensure_self_templates
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
 from .vault import init_vault, read_state
 
@@ -48,6 +49,7 @@ def _print_json(value: object, *, stream=None) -> None:
 
 def _init_command(vault: Path) -> dict[str, object]:
     created = init_vault(vault)
+    created.extend(ensure_self_templates(vault))
     return {
         "ok": True,
         "command": "init",
