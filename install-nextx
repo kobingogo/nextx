@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+python_bin=${NEXTX_PYTHON:-python3}
+output=human
+if [ "${1:-}" = "--json" ]; then
+    output=json
+    shift
+fi
+exec "$python_bin" "$script_dir/skills/nextx/scripts/bootstrap.py" --source "$script_dir" --output "$output" "$@"

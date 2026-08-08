@@ -24,10 +24,27 @@ NextX 是本地优先的 X 运营决策工作台：收集热点、对标帖、�
 推荐直接运行 canonical Skill 自带的自举安装器。它会创建用户级 Python 3.11+ 隔离环境并安装/挂接 NextX；本项目没有第三方运行时依赖。Obsidian 是推荐界面，但不是运行依赖。
 
 ```bash
-python3 skills/nextx/scripts/bootstrap.py
+./install-nextx
 ```
 
-命令输出 JSON，其中 `executable` 是可直接调用的 `nextx` 绝对路径。源码仓库使用隔离环境中的 source launcher，发布版 Skill 才通过 pip 安装构建依赖和 `nextx-workbench`。安装器不会修改系统 Python，也不会自动安装或认证 `twitter-cli`。
+默认输出是面向人的安装结果和下一步提示。Codex、Claude Code、Grok Build 共用这个安装命令和 JSON 协议；源码仓库使用隔离环境中的 source launcher，发布版 Skill 才通过 pip 安装构建依赖和 `nextx-workbench`。安装器不会修改系统 Python，也不会自动安装或认证 `twitter-cli`。
+
+Agent 使用机器可读模式；JSON 中 `nextx` 是用户级 `~/.local/bin/nextx` 入口，`executable` 是隔离 runtime 中的绝对路径：
+
+```bash
+./install-nextx --json
+```
+
+安装后统一使用 CLI：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+nextx setup
+nextx config --show
+nextx doctor --no-smoke
+```
+
+Agent 应读取安装器 JSON 的 `nextx` 字段；若 `command_exposed` 为 false，则使用 `executable`，不要假设 PATH 已经更新。
 
 源码开发环境仍可手动安装：
 

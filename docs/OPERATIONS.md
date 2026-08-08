@@ -73,10 +73,22 @@ Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第�
 
 ## 4. 推荐安装方式：一键安装
 
-在仓库根目录执行：
+在仓库根目录执行统一入口：
+
+```bash
+./install-nextx
+```
+
+Codex、Claude Code、Grok Build 都调用这一个入口，不维护各自的安装逻辑。若只拿到了 Skill 目录，则使用等价命令：
 
 ```bash
 python3 skills/nextx/scripts/bootstrap.py
+```
+
+终端用户默认得到中文下一步提示；Agent 必须使用 JSON 模式：
+
+```bash
+./install-nextx --json
 ```
 
 安装器会：
@@ -84,14 +96,22 @@ python3 skills/nextx/scripts/bootstrap.py
 1. 选择当前可用的 Python 3.11+；
 2. 在 `~/.local/share/nextx/venv` 创建用户级隔离环境；
 3. 源码仓库创建指向 `src/` 的隔离 launcher（无需网络）；发布版 Skill 安装/升级 `pip`、`setuptools`、`wheel` 后安装 `nextx-workbench`；
-4. 输出可直接调用的 `nextx` 绝对路径。
+4. 在用户级 `~/.local/bin` 暴露 `nextx` 入口，并同时输出 runtime 的 `executable` 路径。
 
 安装器不写系统 Python、不写 Vault、不安装或认证 `twitter-cli`。源码 launcher 会随仓库代码更新而生效；发布版 Skill 没有源码时才走 pip 包安装。
+
+若当前 shell 尚未把用户级 bin 目录加入 PATH，执行一次：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Agent 不依赖 PATH：读取 JSON 的 `nextx` 字段；当 `command_exposed` 为 false 时回退到 `executable`。
 
 可先检查而不写入：
 
 ```bash
-python3 skills/nextx/scripts/bootstrap.py --dry-run
+./install-nextx --dry-run
 ```
 
 ### 4.1 手动开发安装（备用）
@@ -157,7 +177,7 @@ python -c "import setuptools; print(setuptools.__version__)"
 "$NEXTX" doctor --no-smoke
 ```
 
-其中 `NEXTX_RUNTIME` 使用 bootstrap JSON 中的 `runtime`。需要改路径时只配置一次：
+其中 `NEXTX_RUNTIME` 使用安装器 JSON 中的 `runtime`。需要改路径时只配置一次：
 
 ```bash
 "$NEXTX" setup --vault "/absolute/path/to/NextX Vault" --runtime "$NEXTX_RUNTIME"
@@ -189,7 +209,7 @@ python -c "import setuptools; print(setuptools.__version__)"
 PYTHONPATH="$NEXTX_ROOT/src" "$NEXTX_PYTHON" -m unittest discover -s "$NEXTX_ROOT/tests" -v
 ```
 
-当前基线应为 **57 项测试全部通过**。测试覆盖：Vault 锁、frontmatter、Self、Signal、Bookmarks 解析与幂等、CLI JSON、默认 Vault 配置、bootstrap dry-run/launcher、自愈、Today、Analysis、Decision、Artifact、Outcome、Weekly Review、索引重建和 twitter-cli 失败路径。
+当前基线应为 **59 项测试全部通过**。测试覆盖：Vault 锁、frontmatter、Self、Signal、Bookmarks 解析与幂等、CLI JSON、默认 Vault 配置、bootstrap dry-run/launcher、自愈、统一安装入口、人类/JSON 安装输出、Today、Analysis、Decision、Artifact、Outcome、Weekly Review、索引重建和 twitter-cli 失败路径。
 
 macOS 调度模板还要验证：
 
@@ -520,7 +540,7 @@ launchctl bootout "gui/$(id -u)/com.nextx.bookmarks"
 
 1. `nextx --help` 正常。
 2. `nextx init` 能创建 Vault 和 Self 模板。
-3. 57 项测试全部通过。
+3. 59 项测试全部通过。
 4. fixture 纵向流程能生成 Decision、Artifact、measured Outcome 和 Weekly Review。
 5. `doctor --no-smoke` 通过。
 6. 如果要启用 Bookmark 轮询，真实 `doctor` smoke 和 Bookmark dry-run 也必须通过。

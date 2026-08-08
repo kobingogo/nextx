@@ -9,7 +9,7 @@ Operate NextX through its deterministic CLI and keep Markdown as the source of t
 
 ## Install and establish context
 
-1. If this is the first use, run `python3 skills/nextx/scripts/bootstrap.py` and use the JSON `executable` it returns for all following commands. The script creates a user-scoped Python 3.11+ runtime and never installs or authenticates `twitter-cli`.
+1. If this is the first use from a source checkout, run `./install-nextx --json`; otherwise run `python3 skills/nextx/scripts/bootstrap.py`. Prefer the JSON `nextx` path when `command_exposed` is true; otherwise use `executable`. Codex, Claude Code, and Grok Build deliberately share this same installer contract; the installer creates a user-scoped Python 3.11+ runtime and never installs or authenticates `twitter-cli`.
 2. Run `<nextx> setup --runtime RUNTIME` once, where `RUNTIME` is the bootstrap JSON value (omit it if no runtime was returned). It creates the default `~/Documents/NextX` Vault and Self templates, is idempotent, and preserves manual Markdown. Use `setup --vault PATH` once to choose another Vault.
 3. Run `<nextx> doctor --no-smoke` before the first collection in a session. Missing `twitter-cli` is an optional warning in this mode; run the smoke check only when the user asks to verify live Bookmark access.
 4. Commands may omit `--vault` after setup. Resolution is explicit `--vault`, `NEXTX_VAULT`, saved user config, then `~/Documents/NextX`.

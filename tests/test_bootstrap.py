@@ -40,6 +40,7 @@ class BootstrapTests(unittest.TestCase):
     def test_source_bootstrap_creates_callable_launcher(self):
         with TemporaryDirectory() as tmp:
             runtime = Path(tmp) / "runtime"
+            bin_dir = Path(tmp) / "bin"
             result = subprocess.run(
                 [
                     sys.executable,
@@ -48,6 +49,8 @@ class BootstrapTests(unittest.TestCase):
                     str(ROOT),
                     "--runtime",
                     str(runtime),
+                    "--bin-dir",
+                    str(bin_dir),
                 ],
                 check=False,
                 capture_output=True,
@@ -55,8 +58,10 @@ class BootstrapTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
+            self.assertEqual(payload["command"], "bootstrap")
+            self.assertEqual(payload["nextx"], str(bin_dir.resolve() / "nextx"))
             help_result = subprocess.run(
-                [payload["executable"], "--help"],
+                [payload["nextx"], "--help"],
                 check=False,
                 capture_output=True,
                 text=True,

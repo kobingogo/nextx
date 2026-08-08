@@ -60,6 +60,8 @@ Bootstrap 不安装或认证 `twitter-cli`。它只检测该命令是否存在�
 
 运行时目录不进入 Vault，不进入 Git，也不影响用户已有 Python 环境。
 
+统一入口：源码 checkout 使用根目录 `./install-nextx`；终端默认显示下一步提示，Codex、Claude Code、Grok Build 使用 `./install-nextx --json`，读取同一份 JSON 输出并优先调用其中的 `nextx`（冲突时回退到 `executable`）。Skill 目录独立分发时，使用等价的 `python3 skills/nextx/scripts/bootstrap.py`。安装器默认在用户级 `~/.local/bin` 暴露 `nextx`，不修改系统目录。
+
 ## 5. Skill 行为
 
 `skills/nextx/SKILL.md` 增加 setup 路由：
@@ -103,7 +105,7 @@ Skill 仍保持人工闸门：不自动发帖、不自动修改 Playbook、不�
 3. 未传 `--vault` 的 `today`、`collect`、`weekly-review` 能解析默认配置路径。
 4. `NEXTX_VAULT` 和显式 `--vault` 能覆盖默认路径。
 5. 配置损坏、Python 不满足版本、pip 安装失败和 twitter-cli 缺失都有可操作错误。
-6. 现有测试保持通过，并新增 setup、路径优先级、幂等、bootstrap 和 Skill 路由测试（当前 57 项）。
+6. 现有测试保持通过，并新增 setup、路径优先级、幂等、bootstrap、统一安装入口和人类/JSON 输出测试（当前 59 项）。
 7. 真实 Bookmark 认证仍是可选外部步骤，不影响非 X 采集流程。
 
 ## 9. 不做的事情

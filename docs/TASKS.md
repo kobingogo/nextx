@@ -29,9 +29,9 @@
 | NX-011 | Outcome / Learn | 记录 24h/7d 指标、替换重复窗口、生成 Weekly Review 与人工 Playbook 提案槽 | P0 | 已完成 | [Learning](../src/nextx/learning.py)、[测试](../tests/test_learning.py) | 积累至少三条真实 measured Artifact |
 | NX-012 | Agent Skill | 建立一份 canonical NextX Skill，路由采集、分析、裁决、写作与复盘并保留人工闸门 | P0 | 已完成 | [NextX Skill](../skills/nextx/SKILL.md)，Skill validator 通过 | 在 Codex/Grok 实际调用中迭代触发语 |
 | NX-013 | 调度 | 提供 macOS launchd 每 180 秒同步收藏的配置模板 | P1 | 已完成 | [launchd 模板](../examples/com.nextx.bookmarks.plist)，`plutil -lint` 通过 | NX-B01 解除后安装到真实 Vault |
-| NX-014 | 可靠性与隐私 | 实现原子写入、写锁、整批校验、状态机、最小上下文和只读 X 边界 | P0 | 已完成 | [架构说明](product-architecture.md#数据与一致性)、57 项测试 | 公开发布前增加安全披露流程 |
+| NX-014 | 可靠性与隐私 | 实现原子写入、写锁、整批校验、状态机、最小上下文和只读 X 边界 | P0 | 已完成 | [架构说明](product-architecture.md#数据与一致性)、59 项测试 | 公开发布前增加安全披露流程 |
 | NX-015 | 性能 | 在 10,000 条 Signal 门槛下加入可删除重建的 frontmatter 派生索引 | P1 | 已完成 | [索引实现](../src/nextx/views.py)、[索引测试](../tests/test_views.py)；增量 Today 实测约 109ms | 超过 100,000 条且 JSON 索引不足时才评估 SQLite |
-| NX-016 | 交付验证 | 完成 fixture 纵向流程、57 项测试、源码编译、可编辑安装、一键 bootstrap、Skill 与 plist 验证 | P0 | 已完成 | [测试目录](../tests/)、[bootstrap](../skills/nextx/scripts/bootstrap.py) | 在真实运营数据上补充验收 |
+| NX-016 | 交付验证 | 完成 fixture 纵向流程、59 项测试、源码编译、可编辑安装、统一一键安装入口和用户级 nextx 命令、Skill 与 plist 验证 | P0 | 已完成 | [测试目录](../tests/)、[install-nextx](../install-nextx)、[bootstrap](../skills/nextx/scripts/bootstrap.py) | 在真实运营数据上补充验收 |
 
 ## 受阻
 
@@ -59,4 +59,5 @@
 | 2026-08-07 | NX-B01 | 初始化为受阻 | 真实 twitter-cli Cookie 提取失败，未写入私人收藏 |
 | 2026-08-07 | NX-P01–NX-P07 | 初始化为待办 | 产品架构中已有明确进入条件，尚未实施 |
 | 2026-08-08 | NX-B01 | 仍受阻 | 代码与 fixture 流程可用，真实 Cookie 认证仍需外部恢复 |
-| 2026-08-08 | NX-016 | 增补一键安装与默认 Vault 配置 | `nextx setup/config`、Skill bootstrap、57 项测试、源码运行演练通过 |
+| 2026-08-08 | NX-016 | 增补一键安装与默认 Vault 配置 | `nextx setup/config`、Skill bootstrap、59 项测试、源码运行演练通过 |
+| 2026-08-08 | NX-016 | 增加跨 Agent 统一安装命令 | 根目录 `./install-nextx`、Agent JSON 安装契约和入口测试通过 |
