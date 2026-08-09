@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from .naming import human_signal_filename, signal_display_title
+from .naming import human_signal_filename, safe_filename_component, signal_display_title
 from .record_index import resolve_record_path
 from .records import read_frontmatter, update_frontmatter
 from .vault import atomic_write_json, atomic_write_text, init_vault, vault_lock
@@ -439,13 +439,13 @@ def migrate_signal_filenames(vault: Path, *, dry_run: bool = True) -> dict[str, 
 
 def _normalized_aliases(value: object, previous_stem: str) -> list[str]:
     aliases: list[str] = []
-    if isinstance(value, list):
-        for item in value:
-            if not isinstance(item, str):
-                continue
-            alias = item.strip()
-            if alias and alias not in aliases:
-                aliases.append(alias)
+    values = value if isinstance(value, list) else [value] if isinstance(value, str) else []
+    for item in values:
+        if not isinstance(item, str):
+            continue
+        alias = item.strip()
+        if alias and alias not in aliases:
+            aliases.append(alias)
     if previous_stem not in aliases:
         aliases.append(previous_stem)
     return aliases
@@ -493,10 +493,28 @@ def migrate_signal_usability(
                     }
                 )
                 continue
+            if not safe_filename_component(display_title, fallback=""):
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "invalid_display_title",
+                    }
+                )
+                continue
             platform = properties.get("platform")
             if not isinstance(platform, str) or not platform.strip():
                 blocked.append(
                     {"id": signal_id, "source": str(source), "reason": "missing_platform"}
+                )
+                continue
+            if not safe_filename_component(platform, fallback=""):
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "invalid_platform",
+                    }
                 )
                 continue
             observed_at = next(
@@ -517,6 +535,18 @@ def migrate_signal_usability(
                 )
                 continue
             try:
+                validated_observed_at = _timestamp(observed_at, "observed_at")
+            except ValueError:
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "invalid_observed_at",
+                    }
+                )
+                continue
+            assert validated_observed_at is not None
+            try:
                 target = directory / human_signal_filename(
                     signal_id=signal_id,
                     platform=platform,
@@ -525,7 +555,7 @@ def migrate_signal_usability(
                         if isinstance(properties.get("author_handle"), str)
                         else None
                     ),
-                    observed_at=observed_at,
+                    observed_at=validated_observed_at,
                     display_title=display_title,
                 )
             except (OverflowError, ValueError):
@@ -533,7 +563,7 @@ def migrate_signal_usability(
                     {
                         "id": signal_id,
                         "source": str(source),
-                        "reason": "invalid_observed_at",
+                        "reason": "invalid_filename_metadata",
                     }
                 )
                 continue

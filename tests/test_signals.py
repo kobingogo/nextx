@@ -35,6 +35,9 @@ class SignalTests(unittest.TestCase):
         display_title: str | None = "Agent workflow evidence",
         account_key: str = "primary",
         aliases: object | None = None,
+        platform: str = "x",
+        author_handle: str = "alpha",
+        published_at: str = "2026-08-07T10:00:00+00:00",
     ) -> Path:
         directory = vault / "01. Signal"
         directory.mkdir(parents=True, exist_ok=True)
@@ -45,9 +48,9 @@ class SignalTests(unittest.TestCase):
             f"account_key: {json.dumps(account_key)}",
             f"id: {json.dumps(signal_id)}",
             'type: "signal"',
-            'platform: "x"',
-            'author_handle: "alpha"',
-            'published_at: "2026-08-07T10:00:00+00:00"',
+            f"platform: {json.dumps(platform)}",
+            f"author_handle: {json.dumps(author_handle)}",
+            f"published_at: {json.dumps(published_at)}",
         ]
         if display_title is not None:
             properties.append(f"display_title: {json.dumps(display_title)}")
@@ -310,6 +313,34 @@ class SignalTests(unittest.TestCase):
             applied = migrate_signal_usability(vault, dry_run=False)
             properties, _ = read_frontmatter(Path(applied["migrated"][0]["target"]))
             self.assertEqual(properties["aliases"], ["kept", "another", source.stem])
+
+    def test_usability_migration_blocks_invalid_filename_metadata_with_accurate_reasons(self):
+        cases = (
+            ({"display_title": "///"}, "invalid_display_title"),
+            ({"platform": "///"}, "invalid_platform"),
+            ({"published_at": "2026-08-07T10:00:00"}, "invalid_observed_at"),
+            ({"author_handle": "a" * 300}, "invalid_filename_metadata"),
+        )
+        for changes, expected_reason in cases:
+            with self.subTest(reason=expected_reason), TemporaryDirectory() as tmp:
+                vault = Path(tmp)
+                source = self.write_legacy_signal(vault, "x:42", **changes)
+
+                result = migrate_signal_usability(vault)
+
+                self.assertEqual(result["planned"], [])
+                self.assertEqual(result["blocked"][0]["reason"], expected_reason)
+                self.assertTrue(source.exists())
+
+    def test_usability_migration_preserves_a_nonempty_scalar_alias(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            source = self.write_legacy_signal(vault, "x:42", aliases=" linked-note ")
+
+            applied = migrate_signal_usability(vault, dry_run=False)
+
+            properties, _ = read_frontmatter(Path(applied["migrated"][0]["target"]))
+            self.assertEqual(properties["aliases"], ["linked-note", source.stem])
 
     def test_manual_signal_uses_stable_content_hash(self):
         with TemporaryDirectory() as tmp:
