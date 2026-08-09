@@ -427,7 +427,9 @@ class CLITests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(result["signal_id"], "x:42")
             self.assertTrue(Path(result["contract"]).is_file())
-            self.assertNotIn("another-signal", stdout)
+            self.assertIn("A verifiable Signal for quick triage.", stdout)
+            self.assertNotIn("x:43", stdout)
+            self.assertNotIn("another-signal must not be included", stdout)
             self.assertEqual(stderr, "")
 
     def test_save_triage_accepts_json_file_and_prints_computed_fields(self):
@@ -724,7 +726,16 @@ class CLITests(unittest.TestCase):
                         "published_at": now.isoformat(),
                         "text": "A verifiable Signal for quick triage.",
                         "source_confidence": "high",
-                    }
+                    },
+                    {
+                        "source_id": "x:43",
+                        "platform": "x",
+                        "source_url": "https://x.com/beta/status/43",
+                        "author_handle": "beta",
+                        "published_at": now.isoformat(),
+                        "text": "another-signal must not be included",
+                        "source_confidence": "high",
+                    },
                 ],
             },
             collector="grok-build",
