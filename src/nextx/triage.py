@@ -386,11 +386,8 @@ def save_triage(
                 "triage_action_eligible": eligible,
                 "triage_marker": marker,
             },
+            body=new_body,
         )
-        # ``update_frontmatter`` preserves all lines when adding properties or
-        # replaces a body when no new properties are added.  Keep both atomic
-        # operations under the same Vault lock so every on-disk state is valid.
-        update_frontmatter(path, {}, body=new_body)
 
     return {
         "schema_version": TRIAGE_VERSION,
