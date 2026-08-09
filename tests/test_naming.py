@@ -30,6 +30,17 @@ class NamingTests(unittest.TestCase):
         self.assertNotIn("..", name)
         self.assertRegex(name, r"__[0-9a-f]{8}\.md$")
 
+    def test_filename_components_remove_obsidian_wikilink_controls(self):
+        name = human_signal_filename(
+            signal_id="x:42",
+            platform="x#feed",
+            author_handle="author^block",
+            observed_at="2026-08-09T01:02:03Z",
+            display_title="Title [[alias]] #heading ^reference",
+        )
+
+        self.assertFalse(any(control in name for control in "#^[]"))
+
     def test_filename_fits_the_portable_utf8_limit(self):
         name = human_signal_filename(
             signal_id="feed:long",

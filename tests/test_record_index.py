@@ -69,6 +69,40 @@ class RecordIndexTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 resolve_record_path(vault, "01. Signal", "signal", "x:1")
 
+    def test_poisoned_cache_cannot_move_another_account_into_primary_results(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            init_vault(vault)
+            path = vault / "01. Signal" / "poisoned.md"
+            path.write_text(signal_note("x:other", account_key="other"), encoding="utf-8")
+            stat = path.stat()
+            index = vault / ".nextx" / "index.json"
+            index.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "folders": {
+                            "01. Signal": {
+                                path.name: {
+                                    "mtime_ns": stat.st_mtime_ns,
+                                    "size": stat.st_size,
+                                    "properties": {
+                                        "account_key": "primary",
+                                        "id": "x:poisoned",
+                                        "type": "signal",
+                                    },
+                                }
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(indexed_records(vault, "01. Signal", "signal"), [])
+            refreshed = json.loads(index.read_text(encoding="utf-8"))
+            self.assertNotIn("poisoned.md", refreshed["folders"]["01. Signal"])
+
     def test_resolver_ignores_traversal_cache_entries_and_scans_the_folder(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)

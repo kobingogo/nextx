@@ -111,6 +111,20 @@ class ViewTests(unittest.TestCase):
             self.assertNotIn("真实标题]]\n", view)
             self.assertNotIn("正常说明\n###", view)
 
+    def test_today_view_links_a_signal_with_hostile_wikilink_controls_safely(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = collector_payload(1)
+            payload["items"][0]["text"] = "Title [[alias]] #heading ^block"
+            ingest_signals(vault, payload, collector="grok-build", now=BASE)
+            path = signal_path(vault, "x:5000")
+
+            render_today(vault, now=BASE + timedelta(hours=1))
+            view = (vault / "04. Views" / "Today.md").read_text(encoding="utf-8")
+
+            self.assertFalse(any(control in path.stem for control in "#^[]"))
+            self.assertIn(f"[[{path.stem}|", view)
+
     def test_today_caps_auto_manual_and_author_and_excludes_decided(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)

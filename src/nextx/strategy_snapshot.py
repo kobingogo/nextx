@@ -21,10 +21,12 @@ def strategy_snapshot_id(vault: Path) -> str:
     root = vault.expanduser().resolve() / "00. Self"
     for name in SELF_SNAPSHOT_FILES:
         path = root / name
-        text = path.read_text(encoding="utf-8") if path.is_file() else "<missing>"
+        present = path.is_file()
+        text = path.read_text(encoding="utf-8") if present else ""
         normalized = "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").split("\n"))
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")
+        digest.update(b"\x01" if present else b"\x00")
         digest.update(normalized.encode("utf-8"))
         digest.update(b"\0")
     return f"strategy:{digest.hexdigest()[:16]}"

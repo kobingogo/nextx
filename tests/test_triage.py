@@ -6,6 +6,7 @@ import unittest
 
 from nextx.contracts import contract_catalog
 from nextx.records import read_frontmatter, update_frontmatter
+from nextx.signal_views import render_signal_inboxes
 from nextx.signals import ingest_signals, signal_path
 from nextx.triage import (
     build_triage_brief,
@@ -62,6 +63,33 @@ class TriageTests(unittest.TestCase):
             self.assertEqual(properties["triage_version"], 1)
             self.assertEqual(properties["triaged_at"], (NOW + timedelta(minutes=1)).isoformat())
             self.assertRegex(str(properties["strategy_snapshot_id"]), r"^strategy:[0-9a-f]{16}$")
+
+    def test_saved_projection_metadata_rebuilds_the_inbox_card(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_vault(Path(tmp))
+            payload = self.payload("x:42")
+            payload.update(
+                {
+                    "why_relevant": "Relevant because builders need durable workflows.",
+                    "value_add": "Distinguish reusable systems from disposable tools.",
+                    "risk": "A single example may not represent the wider market.",
+                }
+            )
+
+            save_triage(vault, payload, now=NOW)
+            properties, body = read_frontmatter(signal_path(vault, "x:42"))
+            render_signal_inboxes(vault, now=NOW)
+            inbox = (vault / "04. Views" / "Signals" / "Builder Core.md").read_text(
+                encoding="utf-8"
+            )
+
+            self.assertEqual(properties["why_relevant"], payload["why_relevant"])
+            self.assertEqual(properties["value_add"], payload["value_add"])
+            self.assertEqual(properties["risk"], payload["risk"])
+            self.assertIn(f"- Why relevant: {payload['why_relevant']}", body)
+            self.assertIn(f"- 相关性：{payload['why_relevant']}", inbox)
+            self.assertIn(f"- 价值增量：{payload['value_add']}", inbox)
+            self.assertIn(f"- 风险：{payload['risk']}", inbox)
 
     def test_first_save_inserts_without_deleting_manual_quick_triage_text(self):
         with TemporaryDirectory() as tmp:

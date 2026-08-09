@@ -9,7 +9,7 @@ import unicodedata
 
 
 PORTABLE_FILENAME_BYTES = 240
-_UNSAFE_FILENAME_CHARS = frozenset('/\\:*?"<>|')
+_UNSAFE_FILENAME_CHARS = frozenset('/\\:*?"<>|#^[]')
 
 
 def signal_display_title(text: str) -> str:

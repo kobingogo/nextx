@@ -73,16 +73,7 @@ def indexed_records(
                 continue
             try:
                 stat = safe_path.stat()
-                entry = cached.get(safe_path.name)
-                if (
-                    isinstance(entry, dict)
-                    and entry.get("mtime_ns") == stat.st_mtime_ns
-                    and entry.get("size") == stat.st_size
-                    and isinstance(entry.get("properties"), dict)
-                ):
-                    properties = entry["properties"]
-                else:
-                    properties, _ = read_frontmatter(safe_path)
+                properties, _ = read_frontmatter(safe_path)
             except (OSError, ValueError):
                 continue
             if not _is_primary_record(properties, record_type):

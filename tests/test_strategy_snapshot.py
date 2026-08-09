@@ -40,6 +40,18 @@ class StrategySnapshotTests(unittest.TestCase):
 
             self.assertEqual(first, strategy_snapshot_id(vault))
 
+    def test_missing_file_differs_from_a_file_containing_the_old_sentinel(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            init_vault(vault)
+
+            absent = strategy_snapshot_id(vault)
+            (vault / "00. Self" / "Profile.md").write_text(
+                "<missing>", encoding="utf-8"
+            )
+
+            self.assertNotEqual(absent, strategy_snapshot_id(vault))
+
 
 if __name__ == "__main__":
     unittest.main()
