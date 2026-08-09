@@ -35,6 +35,7 @@ from .learning import record_outcome, render_weekly_review
 from .preflight import INTENT_REQUIREMENTS, run_preflight
 from .self_model import configure_self, ensure_self_templates, growth_strategy, self_readiness
 from .signals import add_manual_signal, ingest_signals, migrate_signal_filenames
+from .triage import build_triage_brief, save_triage
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
 from .vault import atomic_write_text, init_vault, read_state, recover_vault_lock, vault_lock
 from .views import (
@@ -208,6 +209,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     _add_vault_argument(analysis)
     analysis.add_argument("signal_id")
+
+    triage_brief = subparsers.add_parser(
+        "triage-brief", help="Build bounded context for one Signal quick triage"
+    )
+    _add_vault_argument(triage_brief)
+    triage_brief.add_argument("signal_id")
+
+    save_triage_parser = subparsers.add_parser(
+        "save-triage", help="Validate and save one Signal quick triage"
+    )
+    _add_vault_argument(save_triage_parser)
+    save_triage_parser.add_argument("--input-json", required=True, type=Path)
 
     save_analysis_parser = subparsers.add_parser(
         "save-analysis", help="Validate and persist a deep Signal analysis"
@@ -648,6 +661,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             vault = resolve_vault(arguments.vault)
             result = _persist_handoff(
                 vault, "analysis", arguments.signal_id, build_analysis_brief(vault, arguments.signal_id)
+            )
+            code = 0
+        elif arguments.command == "triage-brief":
+            result = build_triage_brief(resolve_vault(arguments.vault), arguments.signal_id)
+            code = 0
+        elif arguments.command == "save-triage":
+            result = save_triage(
+                resolve_vault(arguments.vault), _load_input(arguments.input_json)
             )
             code = 0
         elif arguments.command == "save-analysis":

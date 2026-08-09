@@ -11,12 +11,14 @@ from nextx.bookmarks import read_bookmark_health
 from nextx.cli import _load_input, main
 from nextx.records import update_frontmatter
 from nextx.self_model import configure_self
+from nextx.signals import ingest_signals, signal_path
 from nextx.twitter_cli import TwitterCLIError
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "bookmarks.json"
 GROK_FIXTURE = Path(__file__).parent / "fixtures" / "grok-signals.json"
 DECISION_FIXTURE = Path(__file__).parent / "fixtures" / "decision-do.json"
+TRIAGE_FIXTURE = Path(__file__).parent / "fixtures" / "triage-valid.json"
 
 
 def run_cli(arguments):
@@ -416,6 +418,73 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result["checks"]["agents"][0]["status"], "declared")
             self.assertTrue(any("仅由调用方声明" in warning for warning in result["warnings"]))
 
+    def test_triage_brief_returns_one_signal_and_contract(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_signal_vault(Path(tmp))
+            code, stdout, stderr = run_cli(["triage-brief", "x:42", "--vault", str(vault)])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(result["signal_id"], "x:42")
+            self.assertTrue(Path(result["contract"]).is_file())
+            self.assertNotIn("another-signal", stdout)
+            self.assertEqual(stderr, "")
+
+    def test_save_triage_accepts_json_file_and_prints_computed_fields(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_signal_vault(Path(tmp))
+            payload = Path(tmp) / "triage.json"
+            payload.write_text(json.dumps(self.triage_payload("x:42")), encoding="utf-8")
+            code, stdout, stderr = run_cli(
+                ["save-triage", "--vault", str(vault), "--input-json", str(payload)]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertIn("triage_score", result)
+            self.assertNotIn("traceback", stderr.casefold())
+
+    def test_save_triage_accepts_json_from_standard_input(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_signal_vault(Path(tmp))
+            with patch("nextx.cli.sys.stdin", StringIO(json.dumps(self.triage_payload("x:42")))):
+                code, stdout, stderr = run_cli(
+                    ["save-triage", "--vault", str(vault), "--input-json", "-"]
+                )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertIn("triage_score", json.loads(stdout))
+
+    def test_triage_commands_return_structured_errors_for_invalid_input_missing_signal_and_lock(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_signal_vault(Path(tmp))
+            invalid = Path(tmp) / "invalid.json"
+            invalid.write_text("{", encoding="utf-8")
+            invalid_code, invalid_stdout, invalid_stderr = run_cli(
+                ["save-triage", "--vault", str(vault), "--input-json", str(invalid)]
+            )
+            missing_code, missing_stdout, missing_stderr = run_cli(
+                ["triage-brief", "x:missing", "--vault", str(vault)]
+            )
+
+            payload = Path(tmp) / "triage.json"
+            payload.write_text(json.dumps(self.triage_payload("x:42")), encoding="utf-8")
+            run_cli(["save-triage", "--vault", str(vault), "--input-json", str(payload)])
+            update_frontmatter(signal_path(vault, "x:42"), {"triage_locked": True})
+            lock_code, lock_stdout, lock_stderr = run_cli(
+                ["save-triage", "--vault", str(vault), "--input-json", str(payload)]
+            )
+
+            for code, stdout, stderr in (
+                (invalid_code, invalid_stdout, invalid_stderr),
+                (missing_code, missing_stdout, missing_stderr),
+                (lock_code, lock_stdout, lock_stderr),
+            ):
+                self.assertEqual(code, 1)
+                self.assertEqual(stdout, "")
+                self.assertFalse(json.loads(stderr)["ok"])
+
     def test_quote_collection_preflight_accepts_an_authorized_read_only_alternative(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp) / "vault"
@@ -443,7 +512,7 @@ class CLITests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(
             {item["name"] for item in result["contracts"]},
-            {"self", "collector", "analysis", "decision", "artifact", "outcome"},
+            {"self", "collector", "triage", "analysis", "decision", "artifact", "outcome"},
         )
         self.assertTrue(all(Path(item["path"]).is_file() for item in result["contracts"]))
 
@@ -631,6 +700,37 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertTrue(result["ready"])
             self.assertTrue((vault / "00. Self" / "Profile.md").is_file())
+
+    def triage_payload(self, signal_id: str) -> dict[str, object]:
+        payload = json.loads(TRIAGE_FIXTURE.read_text(encoding="utf-8"))
+        payload["signal_id"] = signal_id
+        return payload
+
+    def make_signal_vault(self, vault: Path) -> Path:
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        ingest_signals(
+            vault,
+            {
+                "schema_version": 1,
+                "account_key": "primary",
+                "collector": "grok-build",
+                "retrieved_at": now.isoformat(),
+                "items": [
+                    {
+                        "source_id": "x:42",
+                        "platform": "x",
+                        "source_url": "https://x.com/alpha/status/42",
+                        "author_handle": "alpha",
+                        "published_at": now.isoformat(),
+                        "text": "A verifiable Signal for quick triage.",
+                        "source_confidence": "high",
+                    }
+                ],
+            },
+            collector="grok-build",
+            now=now,
+        )
+        return vault
 
 
 if __name__ == "__main__":
