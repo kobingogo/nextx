@@ -44,6 +44,7 @@
 | NX-025 | 三端 Agent 安装闭环 | 一键识别 Codex、Claude Code、Grok Build，部署受控 canonical Skill，并通过“初始化 NextX”进入对话式初始化 | P0 | 已完成 | [安装器](../skills/nextx/scripts/bootstrap.py)、[跨 Agent 回归测试](../tests/test_bootstrap.py)、[操作手册](OPERATIONS.md) | 在真实三端各做一次新会话验收 |
 | NX-026 | 起号 Quote Sprint | 将高质量 Quote 实现为候选采集、时效队列、受限 Decision/Artifact、人工可见性观察与三端对话路由 | P0 | 已完成 | [Quote 指南](QUOTE_SPRINT.md)、[Collector Prompt](../prompts/quote-collector.md)、[实现](../src/nextx/)、[回归测试](../tests/) | 用一个真实冷启动账号连续一周校准窗口、排序与质量闸门 |
 | NX-027 | Growth Loop v0.2 | 实现 Growth Strategy、强制 Growth Contract、Reply Sprint、Thread Pack/Asset Manifest、1h/24h/7d Outcome、同类基线与小白“下一步行动” | P0 | 已完成 | [Growth Loop 指南](GROWTH_LOOP.md)、[Self](../src/nextx/self_model.py)、[Decision](../src/nextx/decisions.py)、[Artifact](../src/nextx/artifacts.py)、[Learning](../src/nextx/learning.py)、[端到端测试](../tests/test_growth_loop.py) | 用真实账号验证行动推荐与样本阈值 |
+| NX-030 | Signal 可用性基础 | 增加稳定 ID 解析、可读唯一文件名、逐条 Quick Triage、分类 Signal Views 与显式迁移预览/批准闸门 | P0 | 已完成 | [Triage Contract](contracts.md)、[Signal Views](../src/nextx/signal_views.py)、[Skill](../skills/nextx/SKILL.md)、[回归测试](../tests/test_skill_contract.py) | 在真实 49-Signal Vault 只预览迁移，并人工复核分类质量 |
 | NX-P02 | 开源准备 | 固定许可证并补充贡献、安全披露和支持范围 | P0 | 已完成 | [Apache-2.0](../LICENSE)、[贡献指南](../CONTRIBUTING.md)、[安全策略](../SECURITY.md) | 真实开源协作后按 issue 数据调整模板 |
 
 ## 进行中
@@ -94,3 +95,4 @@
 | 2026-08-09 | NX-028、NX-029 | 发布 v0.3.0 Alpha 1 | commit `48937e1`、tag `v0.3.0-alpha.1` 已推送；138 项测试、编译、Skill 校验、隔离安装和安装器 dry-run 通过 |
 | 2026-08-09 | NX-028 | 验证远端发行物可复现安装 | 从 GitHub 的 `v0.3.0-alpha.1` 新克隆到临时目录，隔离 runtime 安装成功；`nextx version` 返回 `0.3.0`，`setup` 与渐进式 `next-step` 均成功 |
 | 2026-08-09 | NX-028、NX-029 | 修复最新审核 P0/P1 并发布 Alpha 2 | `v0.3.0-alpha.2`；143 项回归、隔离构建/安装、Bookmark→Decision、Outcome、独立样本、Conversion、Artifact 契约、写锁与 Skill 语义校验通过；补齐 Windows HOME/UTF-8/Skill 镜像兼容 |
+| 2026-08-09 | NX-030 | 完成 Signal 可用性基础 | 稳定记录索引、可读且冲突安全的文件名、版本化 Quick Triage、策略陈旧检测、分类 Inbox、可重建 Views 与只预览的迁移流程均有自动化和临时 Vault 验证 |

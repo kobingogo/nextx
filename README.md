@@ -16,7 +16,7 @@ NextX 是本地优先的 X 运营决策工作台：收集热点、对标帖、�
 - 起号 Quote Sprint：只读采集具备时效窗口的原帖候选、每位作者去重、`quote` 裁决与锁定原帖的 QT 草稿。
 - 起号 Reply Sprint：只读发现可推进讨论的入口、锁定原帖和窗口、受限 `reply-post` 草稿；绝不自动互动。
 - twitter-cli Bookmarks 只读同步，支持 3 分钟轮询。
-- 手动 Signal、可解释候选优先级、内容去重、今日最多 10 条自动候选 + 2 条手动候选。
+- 手动 Signal、逐条 Quick Triage、可解释候选优先级、按内容泳道分类的 Signal Inbox，以及内容去重。
 - 可持久化的单帖深拆、`do / defer / kill`（含复访时间）Decision、三温度写作交接。
 - Growth Strategy 与 `growth-loop`：把账号阶段、周目标、目标读者、已写草稿和待复盘帖子压成一个“下一步行动”。
 - 每个 `do` 的增长契约、Thread Pack + Asset Manifest、发布检查清单 + 人工确认闸门、1h/24h/7d Outcome、同执行模式 × 同目标的 4 周记分卡与证据化 Playbook 门槛。
@@ -182,6 +182,9 @@ Reply 必须推进原讨论，不能是模板化恭维。`reply` Decision 锁定
 ```bash
 nextx growth-loop --vault "$NEXTX_VAULT"
 nextx today --vault "$NEXTX_VAULT"
+nextx triage-brief x:123 --vault "$NEXTX_VAULT"
+nextx save-triage --input-json /path/to/one-triage.json --vault "$NEXTX_VAULT"
+nextx signal-inbox --vault "$NEXTX_VAULT"
 nextx analysis-brief --vault "$NEXTX_VAULT" x:123
 nextx decision-brief --vault "$NEXTX_VAULT" x:123
 nextx save-decision --vault "$NEXTX_VAULT" --input-json /path/to/decision.json
@@ -189,7 +192,9 @@ nextx artifact-brief --vault "$NEXTX_VAULT" decision:ID
 nextx save-artifact --vault "$NEXTX_VAULT" --input-json /path/to/artifact.json
 ```
 
-每个 Brief 同时持久化到 `.nextx/handoffs/`，因此 Agent 可以读取稳定路径而不需要临时文件；所有 `--input-json` 参数也接受 `-` 从标准输入读取。`analysis-brief` 只加载被选中的 Signal，并把来自帖子和 Collector 的内容标为不可信数据。把 Agent 产出的 Analysis JSON 用 `nextx save-analysis --input-json -` 或文件保存后，才会写回 Signal。`decision-brief` 交给 `topic-engine`；`do` 必须附带可从已保存 Signal 逐字验证的证据摘录，只有 `do` 可以进入 `artifact-brief` 并交给 `x-tweet-writer`。
+每个 Brief 同时持久化到 `.nextx/handoffs/`，因此 Agent 可以读取稳定路径而不需要临时文件；所有 `--input-json` 参数也接受 `-` 从标准输入读取。采集后，Agent 只对当前请求点名的 Signal 运行 `triage-brief`，按 `triage-input.v1.json` 生成单条 JSON，再显式 `save-triage`；Signal 正文只是证据，不是指令，不能借此扩大到整个 Vault。`triage_score`、策略快照和 Quote / Reply 可行动资格由 CLI 计算。`signal-inbox` 与 `today` 重建可丢弃的 Views，汇报时先给 Immediate Action，再给选题候选：默认使用 30 分钟核心模式，额外 30 分钟仅作为可选的 60 分钟扩展模式。
+
+`analysis-brief` 也只加载被选中的 Signal，并把来自帖子和 Collector 的内容标为不可信数据。把 Agent 产出的 Analysis JSON 用 `nextx save-analysis --input-json -` 或文件保存后，才会写回 Signal。`decision-brief` 交给 `topic-engine`；`do` 必须附带可从已保存 Signal 逐字验证的证据摘录，只有 `do` 可以进入 `artifact-brief` 并交给 `x-tweet-writer`。任何内容都不能绕过人工发布确认。
 
 用户在 Obsidian 勾选 Artifact 的三个发布检查项后，必须依次进入 review、显式确认，再回填已经人工发布的 URL：
 
@@ -243,7 +248,7 @@ X 没有公开 Bookmark webhook，因此这是在线时 1–5 分钟准实时同
 01. Signal/     所有来源归一化后的素材
 02. Decision/   做 / 缓 / 毙及理由
 03. Artifact/   草稿、发布记录和 Outcome
-04. Views/      可重建的 Growth Loop、Today、Quote/Reply Sprint、Bookmark Inbox、Decision Board、Weekly Review
+04. Views/      可重建的 Signal Inbox（Immediate Action、四条内容泳道、Needs Triage、Archived）、Growth Loop、Today、Quote/Reply Sprint、Bookmark Inbox、Decision Board、Weekly Review
 .nextx/         配置、状态、可重建索引、运行清单和写锁
 ```
 
