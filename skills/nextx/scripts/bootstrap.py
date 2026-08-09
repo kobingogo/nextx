@@ -30,6 +30,22 @@ SKILL_MARKER_SCHEMA_VERSION = 1
 AGENTS = ("codex", "claude", "grok")
 
 
+def _home_path() -> Path:
+    """Resolve a usable home directory even when a runner clears HOME."""
+    try:
+        return Path.home()
+    except RuntimeError:
+        for name in ("HOME", "USERPROFILE"):
+            value = os.environ.get(name)
+            if value:
+                return Path(value).expanduser()
+        drive = os.environ.get("HOMEDRIVE")
+        home = os.environ.get("HOMEPATH")
+        if drive and home:
+            return Path(f"{drive}{home}")
+        return Path.cwd()
+
+
 class InstallerArgumentParser(argparse.ArgumentParser):
     """Avoid text-only argparse exits in the installer JSON protocol."""
 
@@ -490,7 +506,14 @@ def _install_skill_target(
                 staged.unlink()
     else:
         staged = target.parent / f".{target.name}.nextx-stage-{uuid4().hex}"
-        shutil.copytree(source, staged)
+        def _link_or_copy(source_file: str, target_file: str) -> str:
+            try:
+                os.link(source_file, target_file)
+            except OSError:
+                shutil.copy2(source_file, target_file)
+            return target_file
+
+        shutil.copytree(source, staged, copy_function=_link_or_copy)
         try:
             if exists:
                 _remove_managed_target(target)
@@ -516,7 +539,7 @@ def _install_agent_skills(
 ) -> Dict[str, object]:
     """Install one portable Skill into all detected compatible Agent roots."""
     mode, explicit = _parse_agents(agents)
-    home = (home or Path.home()).expanduser().resolve()
+    home = (home or _home_path()).expanduser().resolve()
     probes = _probe_agents(home)
     detected = {name: bool(detail["detected"]) for name, detail in probes.items()}
     requested = explicit if mode in {"all", "explicit"} else {
@@ -734,7 +757,7 @@ def _reexec_with_supported_python() -> None:
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = InstallerArgumentParser(description=__doc__)
-    parser.add_argument("--runtime", type=Path, default=Path.home() / ".local" / "share" / "nextx" / "venv")
+    parser.add_argument("--runtime", type=Path, default=_home_path() / ".local" / "share" / "nextx" / "venv")
     parser.add_argument("--source", type=str)
     parser.add_argument("--repository", default=DEFAULT_REPOSITORY)
     parser.add_argument("--ref", default=DEFAULT_REF)
@@ -744,7 +767,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Refresh a standalone repository cache to the requested ref before reinstalling",
     )
-    parser.add_argument("--bin-dir", type=Path, default=Path.home() / ".local" / "bin")
+    parser.add_argument("--bin-dir", type=Path, default=_home_path() / ".local" / "bin")
     parser.add_argument(
         "--agents",
         default="auto",
@@ -758,6 +781,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--output", choices=("json", "human"), default="json")
     parser.add_argument("--json", action="store_const", const="json", dest="output")
     try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
         _reexec_with_supported_python()
         arguments = parser.parse_args(argv)
         source = _source_root(arguments.source)

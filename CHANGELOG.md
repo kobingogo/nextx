@@ -10,6 +10,7 @@
 - Added Conversion cold-start actions, changed the north star to `do Decision → review-ready Artifact`, and made Planner completion counts use published/measured Artifacts only.
 - Enforced Artifact format contracts, consolidated Outcome frontmatter/body writes, and protected View, registry, and handoff writes with the Vault lock.
 - Corrected Skill metadata validation and pinned the standalone installer default ref to `v0.3.0-alpha.2`.
+- Hardened Windows execution: configuration no longer eagerly resolves a missing HOME, installer output is UTF-8 safe, and the Skill mirror preserves canonical file identity when hard links are available.
 
 - Growth Strategy now orders Discovery, Authority and Conversion work from the weekly lane allocation.
 - Growth Loop includes regular Signals alongside Reply and Quote opportunities.

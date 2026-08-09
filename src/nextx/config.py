@@ -11,15 +11,34 @@ from datetime import datetime, timezone
 from .vault import atomic_write_json, init_vault
 
 
-DEFAULT_VAULT = Path.home() / "Documents" / "NextX"
+def _home_path() -> Path:
+    """Resolve a usable home directory even when CI clears HOME variables."""
+    try:
+        return Path.home()
+    except RuntimeError:
+        for name in ("HOME", "USERPROFILE"):
+            value = os.environ.get(name)
+            if value:
+                return Path(value).expanduser()
+        drive = os.environ.get("HOMEDRIVE")
+        home = os.environ.get("HOMEPATH")
+        if drive and home:
+            return Path(f"{drive}{home}")
+        return Path.cwd()
 
 
 def default_vault() -> Path:
-    return DEFAULT_VAULT.expanduser().resolve()
+    return (_home_path() / "Documents" / "NextX").expanduser().resolve()
 
 
 def user_config_path() -> Path:
-    root = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    configured = os.environ.get("XDG_CONFIG_HOME")
+    if configured:
+        root = Path(configured)
+    elif os.name == "nt" and os.environ.get("APPDATA"):
+        root = Path(os.environ["APPDATA"]) / "NextX"
+    else:
+        root = _home_path() / ".config"
     return root.expanduser() / "nextx" / "config.json"
 
 

@@ -93,4 +93,4 @@
 | 2026-08-09 | NX-028、NX-029 | 启动 v0.2-rc → v0.3 版本目标 | 先收口审查发现的数据完整性、安装与运行断点，再让策略、指标与学习真正驱动下一步行动；外部账号认证和连续运营验证仍独立记录 |
 | 2026-08-09 | NX-028、NX-029 | 发布 v0.3.0 Alpha 1 | commit `48937e1`、tag `v0.3.0-alpha.1` 已推送；138 项测试、编译、Skill 校验、隔离安装和安装器 dry-run 通过 |
 | 2026-08-09 | NX-028 | 验证远端发行物可复现安装 | 从 GitHub 的 `v0.3.0-alpha.1` 新克隆到临时目录，隔离 runtime 安装成功；`nextx version` 返回 `0.3.0`，`setup` 与渐进式 `next-step` 均成功 |
-| 2026-08-09 | NX-028、NX-029 | 修复最新审核 P0/P1 并发布 Alpha 2 | `v0.3.0-alpha.2`；143 项回归、隔离构建/安装、Bookmark→Decision、Outcome、独立样本、Conversion、Artifact 契约、写锁与 Skill 语义校验通过 |
+| 2026-08-09 | NX-028、NX-029 | 修复最新审核 P0/P1 并发布 Alpha 2 | `v0.3.0-alpha.2`；143 项回归、隔离构建/安装、Bookmark→Decision、Outcome、独立样本、Conversion、Artifact 契约、写锁与 Skill 语义校验通过；补齐 Windows HOME/UTF-8/Skill 镜像兼容 |
