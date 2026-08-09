@@ -101,7 +101,7 @@ Codex、Claude Code、Grok Build 都调用这一个入口，不维护各自的�
 4. 在用户级 `~/.local/bin` 暴露 `nextx` 入口，并同时输出 runtime 的 `executable` 路径。
 5. 将完整 canonical Skill 安装到已检测到的 Agent 根目录；JSON 中的 `agent_skills` 给出每端的检测、路径与冲突状态。
 
-安装器不写系统 Python、不写 Vault、不安装或认证 `twitter-cli`。默认 `--agents auto` 只写入检测到的 Agent；在尚未启动/安装目标 Agent 的机器上，可以显式使用 `--agents all`。若发现手工维护的同名 Skill，安装器返回 `conflict` 而不覆盖；只有明确指定 `--force-agent-skills` 才会替换。独立安装在 JSON 中记录 `repository`、`ref`、`source_transport`；通过 Git 下载时还记录 `source_revision`。默认 ref 是 `main`，追求可复现时应传入已审阅的 tag 或 branch。
+安装器不写系统 Python、不写 Vault、不安装或认证 `twitter-cli`。默认 `--agents auto` 只写入检测到的 Agent；在尚未启动/安装目标 Agent 的机器上，可以显式使用 `--agents all`。若发现手工维护的同名 Skill，安装器返回 `conflict` 而不覆盖；只有明确指定 `--force-agent-skills` 才会替换。独立安装在 JSON 中记录 `repository`、`ref`、`source_transport`；通过 Git 下载时还记录 `source_revision`。默认 ref 是当前发行 tag `v0.3.0-alpha.2`，追求其他版本时应显式传入已审阅的 tag 或 branch。
 
 若当前 shell 尚未把用户级 bin 目录加入 PATH，执行一次：
 
@@ -144,7 +144,7 @@ Skill 会将此视为对默认 Vault 初始化的明确授权，执行 `next-ste
 cd /Users/bingo/workspace/NextX
 
 /opt/homebrew/bin/python3.11 -m venv .venv
-.venv/bin/python -m pip install -e . --quiet --no-build-isolation
+.venv/bin/python -m pip install -e . --quiet
 .venv/bin/nextx --help
 ```
 
@@ -170,7 +170,7 @@ python3.11 -m venv .venv
 export PIP_CERT="/absolute/path/to/company-ca.pem"
 ```
 
-不要长期使用关闭 TLS 校验的参数。`--no-build-isolation` 只应在当前虚拟环境已经有满足要求的构建工具时使用。
+不要长期使用关闭 TLS 校验的参数。默认安装会使用项目声明的隔离构建依赖。
 
 ### 4.2 安装错误的判断方法
 

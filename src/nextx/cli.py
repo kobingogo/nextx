@@ -36,7 +36,7 @@ from .preflight import INTENT_REQUIREMENTS, run_preflight
 from .self_model import configure_self, ensure_self_templates, growth_strategy, self_readiness
 from .signals import add_manual_signal, ingest_signals, migrate_signal_filenames
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
-from .vault import atomic_write_text, init_vault, read_state, recover_vault_lock
+from .vault import atomic_write_text, init_vault, read_state, recover_vault_lock, vault_lock
 from .views import (
     render_decision_board,
     render_growth_loop,
@@ -544,7 +544,8 @@ def _persist_handoff(
     init_vault(vault)
     safe_subject = re.sub(r"[^A-Za-z0-9._-]+", "-", subject).strip("-") or "item"
     path = vault / ".nextx" / "handoffs" / f"{kind}-{safe_subject}.md"
-    atomic_write_text(path, f"# NextX {kind} handoff\n\n{brief.rstrip()}\n")
+    with vault_lock(vault):
+        atomic_write_text(path, f"# NextX {kind} handoff\n\n{brief.rstrip()}\n")
     return {**result, "handoff_path": str(path)}
 
 

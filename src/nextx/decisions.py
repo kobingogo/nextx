@@ -25,7 +25,10 @@ QUOTE_ANGLE_TYPES = {
 }
 RELATIONSHIP_GOALS = {"reader_discovery", "author_dialogue", "credibility"}
 GROWTH_OBJECTIVES = {"awareness", "authority", "conversion"}
-RAW_SIGNAL_SECTION = re.compile(r"^## 原始内容\s*$\n(?P<text>.*?)(?=^##\s|\Z)", re.MULTILINE | re.DOTALL)
+RAW_SIGNAL_SECTION = re.compile(
+    r"^## (?:原始内容|原帖)\s*$\n(?P<text>.*?)(?=^##\s|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
 EXPERIMENT_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 

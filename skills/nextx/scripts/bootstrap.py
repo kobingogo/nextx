@@ -22,7 +22,7 @@ from uuid import uuid4
 
 
 DEFAULT_REPOSITORY = "https://github.com/kobingogo/nextx.git"
-DEFAULT_REF = "main"
+DEFAULT_REF = "v0.3.0-alpha.2"
 MIN_PYTHON = (3, 11)
 CACHE_SCHEMA_VERSION = 1
 MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
@@ -108,7 +108,6 @@ def _install_runtime_project(runtime: Path, source: Path) -> None:
         "pip",
         "install",
         "--disable-pip-version-check",
-        "--no-build-isolation",
         "--upgrade",
         str(source),
     ]

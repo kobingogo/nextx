@@ -154,6 +154,27 @@ class GrowthLoopIntegrationTests(unittest.TestCase):
             self.assertIn("x:8002", result["next_action"]["command"])
             self.assertEqual(result["lane_targets"]["authority"], 1)
 
+    def test_conversion_strategy_promotes_a_pending_signal_to_conversion_brief(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = self_payload()
+            payload["growth_strategy"]["objective"] = "conversion"
+            payload["growth_strategy"]["lane_allocation"] = {
+                "discovery": 0,
+                "authority": 0,
+                "conversion": 1,
+            }
+            configure_self(vault, payload)
+            regular = reply_envelope()
+            regular["items"][0].pop("reply_candidate")
+            regular["items"][0].pop("reply_window_ends_at")
+            ingest_signals(vault, regular, collector="grok-build", now=NOW)
+
+            result = render_growth_loop(vault, now=NOW)
+
+            self.assertEqual(result["next_action"]["id"], "conversion_brief")
+            self.assertIn("x:8001", result["next_action"]["command"])
+
     def test_novice_can_run_reply_to_outcome_growth_loop(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)

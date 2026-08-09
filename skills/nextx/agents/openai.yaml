@@ -1,4 +1,4 @@
 interface:
   display_name: "NextX Workbench"
   short_description: "Run the local-first X Growth Loop for one account"
-default_prompt: "Use $nextx to inspect NextX readiness and explain one safe, human-controlled next growth action; do not install or initialize unless I ask; do not collect, interact, or publish unless I ask."
+  default_prompt: "Use $nextx to inspect NextX readiness and explain one safe, human-controlled next growth action; do not install or initialize unless I ask; do not collect, interact, or publish unless I ask."

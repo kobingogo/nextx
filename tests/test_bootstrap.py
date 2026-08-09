@@ -104,7 +104,7 @@ class BootstrapTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(package_check.returncode, 0, package_check.stderr)
-            self.assertEqual(package_check.stdout.strip(), "0.3.0")
+            self.assertEqual(package_check.stdout.strip(), "0.3.0a2")
 
     def test_human_output_uses_runtime_when_global_command_collides(self):
         with TemporaryDirectory() as tmp:

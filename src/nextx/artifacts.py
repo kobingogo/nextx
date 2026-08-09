@@ -21,6 +21,7 @@ X_POST_URL = re.compile(
 )
 ARTIFACT_STATUSES = {"draft", "review_ready", "publish_confirmed", "published", "measured"}
 THREAD_FORMATS = {"thread", "thread-post"}
+ARTIFACT_FORMATS = {"single-post", "thread", "thread-post", "quote-post", "reply-post"}
 ASSET_ROLES = {"cover", "supporting", "diagram"}
 PUBLISH_CHECKLIST = (
     "- [x] 事实与链接已核验",
@@ -367,6 +368,8 @@ def save_artifact(
         raise ValueError("Artifact requires schema_version=1 and account_key='primary'")
     decision_id = _required_string(payload, "decision_id")
     artifact_format = _required_string(payload, "format")
+    if artifact_format not in ARTIFACT_FORMATS:
+        raise ValueError(f"Artifact format must be one of: {', '.join(sorted(ARTIFACT_FORMATS))}")
     draft = _required_string(payload, "draft")
     thread_pack = _thread_pack(payload, artifact_format)
     asset_manifest = _asset_manifest(payload)
@@ -377,6 +380,12 @@ def save_artifact(
     execution_mode = decision_properties.get("execution_mode", "original")
     if execution_mode not in {"original", "quote", "reply"}:
         raise ValueError("Decision has an invalid execution_mode")
+    recommended_format = decision_properties.get("recommended_format")
+    if execution_mode == "original" and isinstance(recommended_format, str):
+        if artifact_format != recommended_format:
+            raise ValueError(
+                "Artifact format must match the Decision recommended_format"
+            )
     signal_ids = decision_properties.get("signal_ids", [])
     if not isinstance(signal_ids, list):
         raise ValueError("Decision signal_ids are invalid")

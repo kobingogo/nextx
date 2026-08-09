@@ -71,6 +71,51 @@ def setup_published(vault: Path) -> dict[str, object]:
     return artifact
 
 
+def setup_independent_published(vault: Path, index: int) -> dict[str, object]:
+    signals = json.loads(SIGNALS.read_text(encoding="utf-8"))
+    item = signals["items"][0]
+    source_id = f"x:{4000 + index}"
+    source_url = f"https://x.com/alpha/status/{4000 + index}"
+    item.update(
+        {
+            "source_id": source_id,
+            "source_url": source_url,
+            "text": f"A verifiable trend signal {index}.",
+        }
+    )
+    ingest_signals(vault, signals, collector="grok-build", now=NOW)
+    decision_payload = json.loads(DO_DECISION.read_text(encoding="utf-8"))
+    decision_payload["signal_ids"] = [source_id]
+    decision_payload["evidence"] = [{
+        "signal_id": source_id,
+        "quote": f"A verifiable trend signal {index}.",
+        "source_url": source_url,
+    }]
+    decision = save_decision(vault, decision_payload, now=NOW.replace(minute=index))
+    artifact = save_artifact(
+        vault,
+        {
+            "schema_version": 1,
+            "account_key": "primary",
+            "decision_id": decision["id"],
+            "format": "single-post",
+            "draft": f"An independent measured post {index}.",
+        },
+        now=NOW + timedelta(minutes=12 + index),
+    )
+    path = Path(str(artifact["path"]))
+    path.write_text(path.read_text(encoding="utf-8").replace("- [ ]", "- [x]"), encoding="utf-8")
+    mark_review_ready(vault, str(artifact["id"]), now=NOW + timedelta(minutes=13 + index))
+    confirm_publish(vault, str(artifact["id"]), confirmed=True, now=NOW + timedelta(minutes=14 + index))
+    record_published(
+        vault,
+        str(artifact["id"]),
+        f"https://x.com/example/status/{7000 + index}",
+        now=NOW + timedelta(minutes=15 + index),
+    )
+    return artifact
+
+
 def outcome(window: str, views: int) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -90,6 +135,24 @@ def outcome(window: str, views: int) -> dict[str, object]:
 
 
 class LearningTests(unittest.TestCase):
+    def test_zero_action_independent_samples_propose_stop(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            artifacts = [setup_independent_published(vault, index) for index in range(1, 4)]
+            zero_action = outcome("7d", 100)
+            zero_action["growth_signals"] = {"follow_up_completed": False}
+            for artifact in artifacts:
+                record_outcome(
+                    vault,
+                    str(artifact["id"]),
+                    zero_action,
+                    now=NOW + timedelta(days=7, minutes=30),
+                )
+
+            result = render_weekly_review(vault, now=NOW + timedelta(days=7, minutes=30))
+
+            self.assertEqual(result["playbook_proposals"][0]["action"], "stop")
+
     def test_outcome_window_cannot_be_recorded_before_publish_age_is_due(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
@@ -101,6 +164,19 @@ class LearningTests(unittest.TestCase):
                     str(artifact["id"]),
                     outcome("1h", 100),
                     now=NOW + timedelta(minutes=30),
+                )
+
+    def test_early_outcome_window_cannot_be_backfilled_after_the_next_checkpoint(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            artifact = setup_published(vault)
+
+            with self.assertRaisesRegex(ValueError, "expired"):
+                record_outcome(
+                    vault,
+                    str(artifact["id"]),
+                    outcome("1h", 100),
+                    now=NOW + timedelta(hours=25),
                 )
 
     def test_outcomes_are_validated_revisioned_and_preserve_notes(self):
@@ -184,8 +260,8 @@ class LearningTests(unittest.TestCase):
             review = Path(str(result["view"])).read_text(encoding="utf-8")
             self.assertIn("做：0", review)
             self.assertIn("Artifact 转化：0 / 0", review)
-            self.assertIn("北极星（do Decision → 可发草稿）中位时延：12.0 分钟", review)
-            self.assertEqual(result["north_star"]["median_minutes"], 12.0)
+            self.assertIn("北极星（do Decision → 通过发布检查）中位时延：13.0 分钟", review)
+            self.assertEqual(result["north_star"]["median_minutes"], 13.0)
             self.assertEqual(result["north_star"]["on_target_count"], 1)
             self.assertIn("4 周中位互动命中率：2.11%", review)
             self.assertIn("900 views", review)
@@ -226,7 +302,7 @@ class LearningTests(unittest.TestCase):
             self.assertIsNone(result["four_week_median_engagement_rate"])
             self.assertIn("4 周中位互动命中率：暂无数据", review)
 
-    def test_playbook_proposals_require_three_comparable_growth_samples(self):
+    def test_playbook_does_not_treat_three_artifacts_from_one_decision_as_independent_samples(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             first = setup_published(vault)
@@ -263,11 +339,10 @@ class LearningTests(unittest.TestCase):
 
             result = render_weekly_review(vault, now=outcome_time("7d"))
             scorecard = result["growth_scorecards"]["original:authority"]
-            self.assertEqual(scorecard["measured_count"], 3)
-            self.assertTrue(scorecard["playbook_evidence_ready"])
-            self.assertEqual(result["playbook_evidence_ready_groups"], ["original:authority"])
-            self.assertEqual(result["playbook_proposals"][0]["action"], "repeat")
-            self.assertEqual(len(result["playbook_proposals"][0]["evidence"]), 3)
+            self.assertEqual(scorecard["measured_count"], 1)
+            self.assertFalse(scorecard["playbook_evidence_ready"])
+            self.assertEqual(result["playbook_evidence_ready_groups"], [])
+            self.assertEqual(result["playbook_proposals"], [])
 
     def test_quote_outcome_records_observations_without_claiming_causality(self):
         with TemporaryDirectory() as tmp:

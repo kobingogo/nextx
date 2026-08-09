@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "nextx-workbench"
-version = "0.3.0"
+version = "0.3.0a2"
 description = "Local-first X growth decision workbench"
 requires-python = ">=3.11"
 dependencies = []
@@ -14,3 +14,7 @@ nextx = "nextx.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.data-files]
+schemas = ["schemas/*.json"]
+prompts = ["prompts/*.md"]

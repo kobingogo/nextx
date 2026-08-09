@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .vault import atomic_write_json, init_vault
+from .vault import atomic_write_json, init_vault, vault_lock
 
 
 PRIMARY_ACCOUNT = "primary"
@@ -42,7 +42,8 @@ def ensure_account_registry(vault: Path) -> dict[str, object]:
     accounts[PRIMARY_ACCOUNT] = {"status": "active", "storage": "this_vault"}
     normalized = {**value, "schema_version": 1, "account_key": PRIMARY_ACCOUNT, "accounts": accounts}
     if value != normalized:
-        atomic_write_json(path, normalized)
+        with vault_lock(vault):
+            atomic_write_json(path, normalized)
     return normalized
 
 

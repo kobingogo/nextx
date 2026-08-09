@@ -8,7 +8,7 @@
     "schema_version": {"const": 1},
     "account_key": {"const": "primary"},
     "decision_id": {"type": "string", "minLength": 1},
-    "format": {"type": "string", "minLength": 1},
+    "format": {"enum": ["single-post", "thread", "thread-post", "quote-post", "reply-post"]},
     "draft": {"type": "string", "minLength": 1},
     "thread_pack": {
       "type": "object",

@@ -2,7 +2,7 @@
 
 NextX 是本地优先的 X 运营决策工作台：收集热点、对标帖、收藏和想法，把 Signal 裁决为“做 / 缓 / 毙”，把“做”交给现有 Agent Skill 形成草稿，再把发布结果写回每周复盘。
 
-当前是单账号 v0.3.0 Alpha「Growth Loop」。Agent 对话是主操作入口：NextX Skill 负责安装、Vault 设置、Self 配置与日常路由；Obsidian 是数据与看板，`nextx` CLI 是 Agent 在后台调用的确定性执行内核。它会按本周 Discovery / Authority / Conversion 配比给起号用户一个可解释的下一步行动，但没有独立前端，也不会自动发帖、回复、点赞或关注。
+当前是单账号 v0.3.0 Alpha 2「Growth Loop」。Agent 对话是主操作入口：NextX Skill 负责安装、Vault 设置、Self 配置与日常路由；Obsidian 是数据与看板，`nextx` CLI 是 Agent 在后台调用的确定性执行内核。它会按本周 Discovery / Authority / Conversion 配比给起号用户一个可解释的下一步行动，但没有独立前端，也不会自动发帖、回复、点赞或关注。
 
 ## 项目状态
 
@@ -64,7 +64,7 @@ Agent 应读取安装器 JSON 的 `nextx` 字段；若 `command_exposed` 为 fal
 python3.11 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e . --no-build-isolation
+python -m pip install -e .
 nextx --help
 ```
 
@@ -208,7 +208,7 @@ nextx record-outcome --vault "$NEXTX_VAULT" artifact:ID --input-json /path/to/ou
 nextx weekly-review --vault "$NEXTX_VAULT"
 ```
 
-7d Outcome 把 Artifact 标为 `measured`。周报只使用 7d 快照比较同一生命周期节点，1h/24h 仅保留为早期信号；它生成 `04. Views/Weekly Review.md`，提供两极帖、`do → 草稿`时延、同执行模式 × 同目标的记分卡、实验归因和学习提案槽。少于三条同类 7d 样本时只保留假设，不生成 Playbook 提案；它不会自动修改 Playbook。
+7d Outcome 把 Artifact 标为 `measured`。周报只使用 7d 快照比较同一生命周期节点，1h/24h 仅保留为早期信号；它生成 `04. Views/Weekly Review.md`，提供两极帖、`do → 通过发布检查`时延、同执行模式 × 同目标的记分卡、实验归因和学习提案槽。少于三条同类 7d 样本时只保留假设，不生成 Playbook 提案；它不会自动修改 Playbook。
 
 若意外中断后留下锁，先确认没有 NextX 写入进程，再运行：
 
@@ -264,10 +264,10 @@ X 没有公开 Bookmark webhook，因此这是在线时 1–5 分钟准实时同
 
   ```bash
   /opt/homebrew/bin/python3.11 -m venv .venv
-  .venv/bin/python -m pip install -e . --quiet --no-build-isolation
+  .venv/bin/python -m pip install -e . --quiet
   ```
 
-  没有 Homebrew 时，把第一行替换为 `python3.11 -m venv .venv`。如果需要在线更新构建工具，先运行 `.venv/bin/python -m pip install --upgrade pip setuptools wheel`；公司代理环境应配置 `PIP_CERT=/absolute/path/to/company-ca.pem`，不要长期使用关闭 TLS 校验的参数。`--no-build-isolation` 只应在当前 venv 已有 `setuptools>=68` 时使用。
+  没有 Homebrew 时，把第一行替换为 `python3.11 -m venv .venv`。如果需要在线更新构建工具，先运行 `.venv/bin/python -m pip install --upgrade pip setuptools wheel`；公司代理环境应配置 `PIP_CERT=/absolute/path/to/company-ca.pem`，不要长期使用关闭 TLS 校验的参数。
 - `twitter_binary: missing`：安装并认证兼容的 twitter-cli，再重跑 `doctor`。
 - Bookmark smoke 失败：先在终端直接确认 twitter-cli 登录状态；X 私有接口变化时暂用手动/Grok 导入。
 - Collector 被拒绝：用 `schemas/collector-envelope.v1.json` 校验版本、必填字段和 URL。

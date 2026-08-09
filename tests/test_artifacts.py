@@ -76,6 +76,18 @@ class ArtifactTests(unittest.TestCase):
             self.assertEqual(properties["status"], "draft")
             self.assertIn("Local agents", body)
 
+    def test_artifact_format_must_match_original_decision_recommendation(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            signals = json.loads(SIGNALS.read_text(encoding="utf-8"))
+            ingest_signals(vault, signals, collector="grok-build", now=NOW)
+            decision_payload = json.loads(DO_DECISION.read_text(encoding="utf-8"))
+            decision_payload["recommended_format"] = "thread"
+            decision = save_decision(vault, decision_payload, now=NOW)
+
+            with self.assertRaisesRegex(ValueError, "recommended_format"):
+                save_artifact(vault, artifact_payload(decision["id"]), now=NOW)
+
     def test_non_do_decision_and_empty_draft_are_rejected(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
@@ -295,6 +307,7 @@ class ArtifactTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             decision = setup_decision(vault, "do")
+            update_frontmatter(Path(str(decision["path"])), {"recommended_format": "thread"})
             payload = {
                 "schema_version": 1,
                 "account_key": "primary",

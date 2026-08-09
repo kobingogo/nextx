@@ -44,7 +44,7 @@ def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def update_frontmatter(path: Path, changes: dict[str, object]) -> None:
+def update_frontmatter(path: Path, changes: dict[str, object], *, body: str | None = None) -> None:
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     _, closing = _frontmatter_bounds(lines, path)
     remaining = dict(changes)
@@ -56,7 +56,10 @@ def update_frontmatter(path: Path, changes: dict[str, object]) -> None:
             lines[index] = f"{key}: {_json(remaining.pop(key))}\n"
     additions = [f"{key}: {_json(value)}\n" for key, value in remaining.items()]
     lines[closing:closing] = additions
-    atomic_write_text(path, "".join(lines))
+    rendered = "".join(lines[: closing + 1]) + (
+        body if body is not None else "".join(lines[closing + 1 :])
+    )
+    atomic_write_text(path, rendered)
 
 
 def append_markdown(path: Path, markdown: str) -> None:

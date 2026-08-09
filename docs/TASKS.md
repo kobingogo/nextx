@@ -1,6 +1,6 @@
 # NextX 任务台账
 
-**当前版本：** v0.2-rc → v0.3（单一 X 账号）  
+**当前版本：** v0.3.0-alpha.2（单一 X 账号）
 **更新时间：** 2026-08-09  
 **状态来源：** 本文档是当前任务状态的唯一权威台账；`docs/superpowers/plans/` 中的复选框仅保留历史执行上下文。
 
@@ -50,8 +50,8 @@
 
 | ID | 模块 | 任务 | 优先级 | 状态 | 当前证据 | 完成门槛 |
 | --- | --- | --- | --- | --- | --- | --- |
-| NX-028 | v0.2-rc 稳定化 | 修复 Signal 路径碰撞、Windows 锁探测、Outcome 时间与审计语义、跨账号投影、Reply 队列、收藏完整快照、独立安装依赖与升级路径 | P0 | 已完成 | `v0.3.0-alpha.1` 已发布；Signal 迁移、核心 fallback、隔离 venv 安装、升级缓存与 138 项回归均已验证 | 进入 NX-B02 的真实三端 Agent 验收 |
-| NX-029 | v0.3 决策系统 | 让 Growth Strategy 驱动 Discovery/Authority/Conversion 的下一步排序；建立可计算北极星时延、到期 Outcome、证据/反例约束的 repeat/alter/stop Playbook；完善小白对话引导 | P0 | 已完成 | Growth Planner、到期窗口、`do Decision → Artifact` 中位时延、Playbook 证据/反例、渐进问题与端到端测试已随 `v0.3.0-alpha.1` 发布 | 用真实运营样本校正指标阈值与推荐质量 |
+| NX-028 | v0.2-rc 稳定化 | 修复 Signal 路径碰撞、Windows 锁探测、Outcome 时间与审计语义、跨账号投影、Reply 队列、收藏完整快照、独立安装依赖与升级路径 | P0 | 已完成 | `v0.3.0-alpha.2`；143 项回归、隔离 wheel 安装、构建隔离和 Skill 校验均已验证 | 进入 NX-B02 的真实三端 Agent 验收 |
+| NX-029 | v0.3 决策系统 | 让 Growth Strategy 驱动 Discovery/Authority/Conversion 的下一步排序；建立可计算北极星时延、到期 Outcome、证据/反例约束的 repeat/alter/stop Playbook；完善小白对话引导 | P0 | 已完成 | `v0.3.0-alpha.2`；Growth Planner、Conversion 冷启动、review-ready 北极星、独立样本与格式/写入契约回归均通过 | 用真实运营样本校正指标阈值与推荐质量 |
 
 ## 受阻
 
@@ -93,3 +93,4 @@
 | 2026-08-09 | NX-028、NX-029 | 启动 v0.2-rc → v0.3 版本目标 | 先收口审查发现的数据完整性、安装与运行断点，再让策略、指标与学习真正驱动下一步行动；外部账号认证和连续运营验证仍独立记录 |
 | 2026-08-09 | NX-028、NX-029 | 发布 v0.3.0 Alpha 1 | commit `48937e1`、tag `v0.3.0-alpha.1` 已推送；138 项测试、编译、Skill 校验、隔离安装和安装器 dry-run 通过 |
 | 2026-08-09 | NX-028 | 验证远端发行物可复现安装 | 从 GitHub 的 `v0.3.0-alpha.1` 新克隆到临时目录，隔离 runtime 安装成功；`nextx version` 返回 `0.3.0`，`setup` 与渐进式 `next-step` 均成功 |
+| 2026-08-09 | NX-028、NX-029 | 修复最新审核 P0/P1 并发布 Alpha 2 | `v0.3.0-alpha.2`；143 项回归、隔离构建/安装、Bookmark→Decision、Outcome、独立样本、Conversion、Artifact 契约、写锁与 Skill 语义校验通过 |

@@ -1,6 +1,6 @@
 # NextX 产品与技术架构
 
-NextX 是单账号、本地优先的 X 增长决策工作台。Agent 对话承担操作和推理，Obsidian 承担数据、看板与人工编辑，`nextx` CLI 承担确定性的校验、状态和文件写入。v0.3.0 Alpha「Growth Loop」不是纯终端产品，也不开发独立前端；它优先帮助运营小白知道下一步该做什么，而非扩大待办队列。
+NextX 是单账号、本地优先的 X 增长决策工作台。Agent 对话承担操作和推理，Obsidian 承担数据、看板与人工编辑，`nextx` CLI 承担确定性的校验、状态和文件写入。v0.3.0 Alpha 2「Growth Loop」不是纯终端产品，也不开发独立前端；它优先帮助运营小白知道下一步该做什么，而非扩大待办队列。
 
 ## 设计目标
 
@@ -89,7 +89,7 @@ Learn 是读取历史记录的周流程，不是第五个对象。Decision 的�
 
 ## Growth Loop：为小白收敛下一步
 
-`growth-loop` 读取用户确认的 Self Growth Strategy 和现有状态，严格按以下顺序建议一件事：待回写的已发布 Artifact → 待审阅草稿 → 待确认/待人工发布 Artifact → 已裁决待写作 Decision → 冷启动的 Reply / Quote 机会 → 少量新采集。它不会自动执行这些动作，也不会把队列排序说成增长因果。
+`growth-loop` 读取用户确认的 Self Growth Strategy 和现有状态，严格按以下顺序建议一件事：待回写的已发布 Artifact → 待审阅草稿 → 待确认/待人工发布 Artifact → 已裁决待写作 Decision → 冷启动的 Conversion / Reply / Quote 机会 → 少量新采集。它不会自动执行这些动作，也不会把队列排序说成增长因果。
 
 这个顺序把“多采集、多写作”的冲动约束为可学习的循环：
 

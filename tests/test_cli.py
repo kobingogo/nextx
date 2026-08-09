@@ -33,7 +33,7 @@ class CLITests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertEqual(stderr, "")
-        self.assertEqual(json.loads(stdout)["version"], "0.3.0")
+        self.assertEqual(json.loads(stdout)["version"], "0.3.0a2")
 
     def test_setup_and_config_work_without_vault_argument(self):
         with TemporaryDirectory() as tmp:

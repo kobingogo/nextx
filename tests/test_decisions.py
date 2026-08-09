@@ -5,11 +5,13 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from nextx.decisions import decision_brief, save_decision
+from nextx.bookmarks import sync_bookmarks
 from nextx.records import read_frontmatter, update_frontmatter
 from nextx.signals import ingest_signals, signal_filename
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "grok-signals.json"
+BOOKMARK_FIXTURE = Path(__file__).parent / "fixtures" / "bookmarks.json"
 NOW = datetime(2026, 8, 7, 13, 0, tzinfo=timezone.utc)
 
 
@@ -65,6 +67,23 @@ def decision_payload(verdict="do"):
 
 
 class DecisionTests(unittest.TestCase):
+    def test_bookmark_signal_can_be_used_as_exact_evidence_for_do_decision(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            bookmark_payload = json.loads(BOOKMARK_FIXTURE.read_text(encoding="utf-8"))
+            sync_bookmarks(vault, bookmark_payload, now=NOW)
+            payload = decision_payload()
+            payload["signal_ids"] = ["x:2084556671712477485"]
+            payload["evidence"] = [{
+                "signal_id": "x:2084556671712477485",
+                "quote": "Example bookmarked post",
+                "source_url": "https://x.com/example/status/2084556671712477485",
+            }]
+
+            result = save_decision(vault, payload, now=NOW)
+
+            self.assertEqual(result["verdict"], "do")
+
     def test_all_three_verdicts_are_persisted(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)

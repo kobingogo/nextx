@@ -64,6 +64,11 @@ def validate() -> None:
     agent_config = (SKILL / "agents" / "openai.yaml").read_text(encoding="utf-8")
     for expected in ("display_name:", "short_description:", "default_prompt:"):
         require(expected in agent_config, f"Agent metadata is missing {expected}")
+    require(
+        re.search(r"^interface:\n(?:  .*\n)*  default_prompt:", agent_config, re.MULTILINE)
+        is not None,
+        "default_prompt must be nested under interface",
+    )
     require("do not install or initialize unless I ask" in agent_config, "Default prompt must not cause an implicit write")
 
     for filename in (

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 
 CONTRACT_FILES = {
@@ -21,7 +22,12 @@ PROMPT_FILES = {
 
 
 def contracts_root() -> Path:
-    return Path(__file__).resolve().parents[2] / "schemas"
+    source_root = Path(__file__).resolve().parents[2] / "schemas"
+    installed_root = Path(sys.prefix) / "schemas"
+    for candidate in (source_root, installed_root):
+        if candidate.is_dir():
+            return candidate
+    return source_root
 
 
 def contract_catalog(name: str | None = None) -> dict[str, object]:

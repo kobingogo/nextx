@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install local package
-        run: python -m pip install -e . --no-build-isolation
+        run: python -m pip install -e .
       - name: Compile
         run: python -m compileall -q src skills/nextx/scripts/bootstrap.py
       - name: Validate NextX Skill semantics

@@ -11,7 +11,12 @@ import re
 
 from .records import read_frontmatter
 from .self_model import growth_strategy, self_readiness
-from .vault import atomic_write_text, init_vault
+from .vault import atomic_write_text, init_vault, vault_lock
+
+
+def _write_view(vault: Path, path: Path, content: str) -> None:
+    with vault_lock(vault):
+        atomic_write_text(path, content)
 
 
 def _timestamp(properties: dict[str, object]) -> datetime:
@@ -73,10 +78,11 @@ def _records(folder: Path, record_type: str) -> list[tuple[Path, dict[str, objec
     if current != cached:
         folders[folder.name] = current
         index_path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(
-            index_path,
-            json.dumps(index, ensure_ascii=False, separators=(",", ":")) + "\n",
-        )
+        with vault_lock(folder.parent):
+            atomic_write_text(
+                index_path,
+                json.dumps(index, ensure_ascii=False, separators=(",", ":")) + "\n",
+            )
     return records
 
 
@@ -248,7 +254,8 @@ def _render_bookmark_inbox(
         _card(path, properties, "X Bookmark") for path, properties in bookmarks[:100]
     )
     content = cards or "暂无收藏 Signal。\n"
-    atomic_write_text(
+    _write_view(
+        vault,
         vault / "04. Views" / "Bookmark Inbox.md",
         f"# Bookmark Inbox\n\n生成时间：{generated_at}\n\n{content}",
     )
@@ -338,7 +345,7 @@ Quote 的目标是让相邻读者通过你的**新增判断**看见你，而不�
 - 如果现在不值得公开站队，是否应缓或毙？
 """
     path = vault / "04. Views" / "Quote Sprint.md"
-    atomic_write_text(path, content)
+    _write_view(vault, path, content)
     return {
         "schema_version": 1,
         "ok": True,
@@ -427,7 +434,7 @@ Reply 的目标是推进一段具体讨论、帮助相邻读者理解问题，�
 - 不能提供新增价值时，是否应该不回复？
 """
     path = vault / "04. Views" / "Reply Sprint.md"
-    atomic_write_text(path, content)
+    _write_view(vault, path, content)
     return {
         "schema_version": 1,
         "ok": True,
@@ -537,7 +544,11 @@ def render_growth_loop(vault: Path, *, now: datetime | None = None) -> dict[str,
     lane_counts = {"discovery": 0, "authority": 0, "conversion": 0}
     for _, properties in artifacts:
         created_at = _parse_time(properties.get("created_at"))
-        if created_at is not None and created_at >= weekly_cutoff:
+        if (
+            properties.get("status") in {"published", "measured"}
+            and created_at is not None
+            and created_at >= weekly_cutoff
+        ):
             lane_counts[_growth_lane(properties)] += 1
     allocation = strategy["lane_allocation"] if isinstance(strategy["lane_allocation"], dict) else {}
     lane_targets = {
@@ -600,11 +611,18 @@ def render_growth_loop(vault: Path, *, now: datetime | None = None) -> dict[str,
                 ))
             if regular_candidates:
                 signal = regular_candidates[0]
-                lane_actions["authority"].append((
-                    "decision_brief", "先裁决一个已有的常规候选",
-                    "已有可审 Signal；先明确做、缓或毙，再决定是否投入原创内容。",
-                    f"decision-brief {signal.get('id')}"
-                ))
+                if strategy["objective"] == "conversion":
+                    lane_actions["conversion"].append((
+                        "conversion_brief", "先评估一个已有候选的转化路径",
+                        "本周目标是转化；先为这个 Signal 明确 CTA、承接资产和可观察的读者动作，再决定是否投入内容。",
+                        f"decision-brief {signal.get('id')}"
+                    ))
+                else:
+                    lane_actions["authority"].append((
+                        "decision_brief", "先裁决一个已有的常规候选",
+                        "已有可审 Signal；先明确做、缓或毙，再决定是否投入原创内容。",
+                        f"decision-brief {signal.get('id')}"
+                    ))
             available_lanes = [lane for lane, actions in lane_actions.items() if actions]
             if available_lanes:
                 stage_order = {
@@ -662,7 +680,7 @@ def render_growth_loop(vault: Path, *, now: datetime | None = None) -> dict[str,
 每次行动都要服务于一个读者级假设：谁会看到、为何现在进入、希望对方做什么、何时复盘。NextX 只推荐下一步；最终裁决、互动和发布始终由人完成。
 """
     path = vault / "04. Views" / "Growth Loop.md"
-    atomic_write_text(path, content)
+    _write_view(vault, path, content)
     return {
         "schema_version": 1,
         "ok": True,
@@ -776,7 +794,7 @@ def render_today(
 {card_text}
 """
     path = vault / "04. Views" / "Today.md"
-    atomic_write_text(path, view)
+    _write_view(vault, path, view)
     _render_bookmark_inbox(vault, signals, generated_at)
     selected = manual + automatic
     return {
@@ -805,5 +823,5 @@ def render_decision_board(vault: Path) -> Path:
     for verdict, title in (("do", "做"), ("defer", "缓"), ("kill", "毙")):
         sections.append(f"## {title}\n\n" + ("\n".join(groups[verdict]) or "- 无"))
     path = vault / "04. Views" / "Decision Board.md"
-    atomic_write_text(path, "# Decision Board\n\n" + "\n\n".join(sections) + "\n")
+    _write_view(vault, path, "# Decision Board\n\n" + "\n\n".join(sections) + "\n")
     return path

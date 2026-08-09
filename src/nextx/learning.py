@@ -222,6 +222,14 @@ def _outcome_due_at(properties: dict[str, object], window: str) -> datetime:
     return published_at + WINDOW_DELAYS[window]
 
 
+def _outcome_expires_at(properties: dict[str, object], window: str) -> datetime | None:
+    """Return the next checkpoint after which an early snapshot is stale."""
+    index = WINDOWS.index(window)
+    if index == len(WINDOWS) - 1:
+        return None
+    return _outcome_due_at(properties, WINDOWS[index + 1])
+
+
 def outcome_next_due_window(
     properties: dict[str, object], body: str, now: datetime
 ) -> str | None:
@@ -342,12 +350,6 @@ def _ensure_outcome_marker(
     return marker, migrated, True
 
 
-def _write_body(path: Path, old_body: str, new_body: str) -> None:
-    full_text = path.read_text(encoding="utf-8")
-    prefix = full_text[: len(full_text) - len(old_body)] if old_body else full_text
-    atomic_write_text(path, prefix + new_body)
-
-
 def record_outcome(
     vault: Path,
     artifact_id: str,
@@ -373,6 +375,12 @@ def record_outcome(
             raise ValueError(
                 f"Outcome window {outcome['window']} is not due until {due_at.isoformat()}"
             )
+        expires_at = _outcome_expires_at(properties, str(outcome["window"]))
+        if expires_at is not None and timestamp >= expires_at:
+            raise ValueError(
+                f"Outcome window {outcome['window']} expired at {expires_at.isoformat()}; "
+                "record the newest due checkpoint instead"
+            )
         marker, working_body, marker_created = _ensure_outcome_marker(properties, body)
         snapshots = _snapshots(working_body, marker)
         revisions = _outcome_revisions(working_body, marker)
@@ -388,14 +396,13 @@ def record_outcome(
             )
         snapshots[str(outcome["window"])] = outcome
         status = "measured" if outcome["window"] == "7d" else str(properties["status"])
-        _write_body(path, body, _replace_outcomes(working_body, snapshots, marker, revisions))
+        updated_body = _replace_outcomes(working_body, snapshots, marker, revisions)
         changes: dict[str, object] = {}
         if marker_created:
             changes["outcome_marker"] = marker
         if status != properties.get("status"):
             changes["status"] = status
-        if changes:
-            update_frontmatter(path, changes)
+        update_frontmatter(path, changes, body=updated_body)
     return {
         "schema_version": 1,
         "ok": True,
@@ -463,11 +470,11 @@ def render_weekly_review(
     four_week_rates: list[float] = []
     weekly_rates: list[float] = []
     experiments: dict[str, list[float]] = {}
-    growth_groups: dict[tuple[str, str], dict[str, list[object]]] = {}
+    growth_groups: dict[tuple[str, str], dict[str, object]] = {}
     quote_measured_count = 0
     quote_author_replied_count = 0
     for _, properties in four_week_drafts:
-        created = _parse_time(properties.get("created_at"))
+        created = _parse_time(properties.get("review_ready_at"))
         decided = decision_times.get(str(properties.get("decision_id")))
         if created and decided:
             latencies.append((created - decided).total_seconds() / 60)
@@ -499,8 +506,23 @@ def render_weekly_review(
                 group = growth_groups.setdefault(
                     (execution_mode, str(objective)),
                     {
-                        "rates": [], "qualified_actions": [], "follow_up_completed": [], "samples": []
+                        "rates": [],
+                        "qualified_actions": [],
+                        "follow_up_completed": [],
+                        "samples_by_key": {},
                     },
+                )
+                decision_id = str(properties.get("decision_id", ""))
+                experiment_id = properties.get("experiment_id")
+                experiment_key = experiment_id if isinstance(experiment_id, str) else ""
+                sample_key = f"{decision_id}:{experiment_key}"
+                samples_by_key = group["samples_by_key"]
+                if not isinstance(samples_by_key, dict) or sample_key in samples_by_key:
+                    continue
+                samples_by_key[sample_key] = (
+                    path,
+                    snapshot,
+                    str(properties.get("published_url", "")),
                 )
                 if rate is not None:
                     group["rates"].append(rate)
@@ -509,7 +531,6 @@ def render_weekly_review(
                     group["qualified_actions"].append(float(_observed_actions(growth_signals)))
                     if growth_signals.get("follow_up_completed") is True:
                         group["follow_up_completed"].append(1.0)
-                group["samples"].append((path, snapshot, str(properties.get("published_url", ""))))
             if properties.get("execution_mode") == "quote":
                 quote_measured_count += 1
                 quote_signals = snapshot.get("quote_signals")
@@ -535,7 +556,9 @@ def render_weekly_review(
     playbook_proposals: list[dict[str, object]] = []
     for (mode, objective), values in sorted(growth_groups.items()):
         rates = values["rates"]
-        sample_count = max(len(rates), len(values["qualified_actions"]))
+        samples_by_key = values["samples_by_key"]
+        samples = list(samples_by_key.values())
+        sample_count = len(samples)
         key = f"{mode}:{objective}"
         evidence_ready = sample_count >= PLAYBOOK_MIN_SAMPLES
         scorecard = {
@@ -548,9 +571,7 @@ def render_weekly_review(
             else None,
             "follow_up_completed_count": int(sum(values["follow_up_completed"])),
             "playbook_evidence_ready": evidence_ready,
-            "independent_sample_keys": sorted(
-                {str(sample[2]) for sample in values["samples"] if sample[2]}
-            ),
+            "independent_sample_keys": sorted(str(key) for key in samples_by_key),
         }
         growth_scorecards[key] = scorecard
         rate_text = _percent(median(rates)) if rates else "暂无有效曝光分母"
@@ -565,20 +586,25 @@ def render_weekly_review(
             f"中位观察动作 {action_text} · {gate}"
         )
         if evidence_ready:
-            samples = sorted(
-                values["samples"], key=lambda sample: float(sample[1]["views"]), reverse=True
-            )
+            samples = sorted(samples, key=lambda sample: float(sample[1]["views"]), reverse=True)
             group_rate = median(rates) if rates else 0.0
-            all_rate = median(four_week_rates) if four_week_rates else group_rate
+            baseline_rates = list(four_week_rates)
+            for rate in rates:
+                try:
+                    baseline_rates.remove(rate)
+                except ValueError:
+                    pass
+            all_rate = median(baseline_rates) if baseline_rates else group_rate
+            median_actions = median(values["qualified_actions"]) if values["qualified_actions"] else 0.0
             action = (
-                "repeat" if group_rate >= all_rate and values["qualified_actions"] else
-                "stop" if group_rate < all_rate * 0.5 and not values["qualified_actions"] else "alter"
+                "stop" if median_actions <= 0 or group_rate < all_rate * 0.5 else
+                "repeat" if group_rate >= all_rate else "alter"
             )
             playbook_proposals.append(
                 {
                     "group": key,
                     "action": action,
-                    "evidence": [sample[0].stem for sample in samples[:3]],
+                    "evidence": [sample[0].stem for sample in samples[:-1][:3]],
                     "counterexample": samples[-1][0].stem,
                 }
             )
@@ -612,7 +638,7 @@ def render_weekly_review(
 - 缓：{verdicts['defer']}
 - 毙：{verdicts['kill']}
 - Artifact 转化：{len(converted_artifacts)} / {do_count}
-- 北极星（do Decision → 可发草稿）中位时延：{latency}（≤20 分钟：{latency_on_target} / {len(latencies)}）
+- 北极星（do Decision → 通过发布检查）中位时延：{latency}（≤20 分钟：{latency_on_target} / {len(latencies)}）
 - 4 周中位互动命中率：{baseline_rate}
 - 本周中位互动命中率：{weekly_rate}
 
@@ -647,7 +673,8 @@ def render_weekly_review(
 - [ ]
 """
     path = vault / "04. Views" / "Weekly Review.md"
-    atomic_write_text(path, content)
+    with vault_lock(vault):
+        atomic_write_text(path, content)
     return {
         "schema_version": 1,
         "ok": True,
@@ -657,7 +684,7 @@ def render_weekly_review(
         "artifact_count": len(converted_artifacts),
         "weekly_artifact_count": len(artifacts),
         "north_star": {
-            "definition": "do Decision 创建到 Artifact 草稿保存的时延",
+            "definition": "do Decision 创建到 Artifact 通过发布检查（review_ready）的时延",
             "target_minutes": 20,
             "sample_count": len(latencies),
             "median_minutes": latency_median,
