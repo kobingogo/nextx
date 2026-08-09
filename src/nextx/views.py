@@ -78,18 +78,29 @@ def _signal_queue_state(
 
 
 def _card(path: Path, properties: dict[str, object], reason: str) -> str:
-    signal_id = str(properties.get("id", path.stem))
+    title = properties.get("display_title") or properties.get("id") or path.stem
+    action = properties.get("recommended_action") or "待判断"
+    triage = properties.get("triage_score")
+    why = properties.get("why_relevant") or reason
     author = properties.get("author_handle")
     author_text = f"@{author}" if author else "手动输入"
     source = properties.get("source_url") or "本地内容"
-    metrics = properties.get("metrics") or {}
-    return f"""### [[{path.stem}|{signal_id}]]
+    metrics = properties.get("metrics")
+    metric_values = metrics if isinstance(metrics, dict) else {}
+    metric_text = "，".join(
+        f"{name} {value}" for name, value in metric_values.items()
+    ) or "暂无"
+    self_fit = _bounded_score(properties, "self_fit")
+    return f"""### [[{path.stem}|{title}]]
 
 - 作者：{author_text}
 - 来源：{source}
 - 时间：{properties.get('published_at') or properties.get('captured_at') or '未知'}
-- 指标：`{metrics}`
-- 入选：{reason}
+- 指标：{metric_text}
+- 建议：{action}
+- 判断分：{triage if isinstance(triage, int) and not isinstance(triage, bool) else '待计算'}
+- Self：{self_fit}/5
+- 入选：{why}
 """
 
 

@@ -34,6 +34,7 @@ from .decisions import decision_brief, save_decision
 from .learning import record_outcome, render_weekly_review
 from .preflight import INTENT_REQUIREMENTS, run_preflight
 from .self_model import configure_self, ensure_self_templates, growth_strategy, self_readiness
+from .signal_views import render_signal_inboxes
 from .signals import add_manual_signal, ingest_signals, migrate_signal_filenames
 from .triage import build_triage_brief, save_triage
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
@@ -149,6 +150,11 @@ def _parser() -> argparse.ArgumentParser:
 
     today = subparsers.add_parser("today", help="Rebuild the daily decision View")
     _add_vault_argument(today)
+
+    signal_inbox = subparsers.add_parser(
+        "signal-inbox", help="Rebuild the classified Signal inbox Views"
+    )
+    _add_vault_argument(signal_inbox)
 
     quote_sprint = subparsers.add_parser(
         "quote-sprint", help="Rebuild the time-bounded launch-stage Quote queue"
@@ -605,10 +611,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = _manual_signal_command(arguments)
             code = 0
         elif arguments.command == "today":
-            result = render_today(resolve_vault(arguments.vault))
-            result["quote_sprint"] = render_quote_sprint(resolve_vault(arguments.vault))
-            result["reply_sprint"] = render_reply_sprint(resolve_vault(arguments.vault))
-            result["growth_loop"] = render_growth_loop(resolve_vault(arguments.vault))
+            vault = resolve_vault(arguments.vault)
+            result = render_today(vault)
+            result["signal_inboxes"] = render_signal_inboxes(vault)
+            result["quote_sprint"] = render_quote_sprint(vault)
+            result["reply_sprint"] = render_reply_sprint(vault)
+            result["growth_loop"] = render_growth_loop(vault)
+            code = 0
+        elif arguments.command == "signal-inbox":
+            result = render_signal_inboxes(resolve_vault(arguments.vault))
             code = 0
         elif arguments.command == "quote-sprint":
             result = render_quote_sprint(resolve_vault(arguments.vault))

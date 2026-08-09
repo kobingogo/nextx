@@ -148,6 +148,36 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertEqual(result["automatic_count"], 2)
             self.assertTrue((Path(tmp) / "04. Views" / "Today.md").exists())
+            self.assertEqual(len(result["signal_inboxes"]["paths"]), 7)
+            self.assertTrue(
+                Path(result["signal_inboxes"]["paths"]["needs_triage"]).exists()
+            )
+
+    def test_signal_inbox_command_only_rebuilds_disposable_views(self):
+        with TemporaryDirectory() as tmp:
+            run_cli(
+                [
+                    "collect",
+                    "--vault",
+                    tmp,
+                    "--source",
+                    "grok",
+                    "--input-json",
+                    str(GROK_FIXTURE),
+                ]
+            )
+            signal = signal_path(Path(tmp), "x:3001")
+            before = signal.read_text(encoding="utf-8")
+
+            code, stdout, stderr = run_cli(["signal-inbox", "--vault", tmp])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["command"], "signal-inbox")
+            self.assertEqual(result["counts"]["needs_triage"], 2)
+            self.assertEqual(len(result["paths"]), 7)
+            self.assertEqual(signal.read_text(encoding="utf-8"), before)
 
     def test_decision_brief_and_save_decision(self):
         with TemporaryDirectory() as tmp:

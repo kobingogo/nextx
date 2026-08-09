@@ -41,6 +41,51 @@ def collector_payload(count=14):
 
 
 class ViewTests(unittest.TestCase):
+    def test_today_card_prefers_triage_fields_and_formats_named_metrics(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = collector_payload(1)
+            payload["items"][0]["metrics"] = {"views": 10, "likes": 2}
+            ingest_signals(vault, payload, collector="grok-build", now=BASE)
+            update_frontmatter(
+                signal_path(vault, "x:5000"),
+                {
+                    "display_title": "可读的快速判断标题",
+                    "recommended_action": "topic",
+                    "triage_score": 87,
+                    "why_relevant": "与本周增长目标直接相关。",
+                },
+            )
+
+            render_today(vault, now=BASE + timedelta(hours=1))
+            view = (vault / "04. Views" / "Today.md").read_text(encoding="utf-8")
+
+            self.assertIn("|可读的快速判断标题]]", view)
+            self.assertIn("建议：topic", view)
+            self.assertIn("判断分：87", view)
+            self.assertIn("指标：views 10，likes 2", view)
+            self.assertIn("与本周增长目标直接相关。", view)
+            self.assertNotIn("{'views': 10, 'likes': 2}", view)
+
+    def test_today_card_keeps_legacy_untriaged_fallbacks(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
+            path = signal_path(vault, "x:5000")
+            text = path.read_text(encoding="utf-8")
+            text = "\n".join(
+                line for line in text.splitlines() if not line.startswith("display_title:")
+            ) + "\n"
+            path.write_text(text, encoding="utf-8")
+
+            render_today(vault, now=BASE + timedelta(hours=1))
+            view = (vault / "04. Views" / "Today.md").read_text(encoding="utf-8")
+
+            self.assertIn("|x:5000]]", view)
+            self.assertIn("建议：待判断", view)
+            self.assertIn("Self：0/5", view)
+            self.assertIn("近期未裁决", view)
+
     def test_today_caps_auto_manual_and_author_and_excludes_decided(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
