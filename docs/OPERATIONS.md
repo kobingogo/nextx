@@ -1,10 +1,12 @@
 # NextX 安装与完整操作手册
 
-**适用版本：** v0.1  
+**适用版本：** v0.2「Growth Loop」  
 **验证日期：** 2026-08-08  
 **运行形态：** 单一 X 账号、本地 CLI + Obsidian + Agent 对话
 
 这份手册同时回答三个问题：当前代码到底实现了什么、怎样安装、怎样从初始化一路验收到完整运营闭环。
+
+首次使用请先阅读 [新手指南](GETTING_STARTED.md)；本文保留完整验收、运维与排障细节。
 
 ## 1. 先理解产品边界
 
@@ -19,7 +21,7 @@ NextX 不是独立 Web 前端。它由三层组成：
 持久化只有四个原语：
 
 ```text
-Self → Signal → Decision(do/defer/kill) → Artifact(draft/published/measured)
+Self → Signal → Decision(do/defer/kill) → Artifact(draft/review_ready/publish_confirmed/published/measured)
 ```
 
 Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第五种核心对象。NextX 永远不自动发帖、点赞、转发、关注或删除 X 内容。
@@ -30,16 +32,16 @@ Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第�
 
 | 能力 | 关键代码 | 当前实现程度 |
 | --- | --- | --- |
-| CLI 与安装 | `pyproject.toml`、`src/nextx/cli.py`、`skills/nextx/scripts/bootstrap.py` | 一键创建用户级 Python 3.11+ 环境、安装构建依赖和 NextX；所有成功/失败输出结构化 JSON |
-| Vault 与 Self | `vault.py`、`records.py`、`self_model.py` | 初始化五个 Self 模板；Markdown frontmatter 是权威数据；原子写入和单 Vault 写锁 |
+| CLI 与安装 | `pyproject.toml`、`src/nextx/cli.py`、`skills/nextx/scripts/bootstrap.py` | 一键创建用户级 Python 3.11+ 环境；独立 Skill 按仓库/ref 隔离源码，优先 Git、无 Git 时可安全下载 GitHub 归档；所有成功/失败输出结构化 JSON |
+| Vault 与 Self | `vault.py`、`records.py`、`self_model.py`、`accounts.py` | 初始化六个 Self 模板、对话式 `configure-self`、Growth Strategy 与 `next-step` 就绪引导；单 Vault 只允许 primary；Markdown frontmatter 是权威数据；原子写入和单 Vault 写锁 |
 | Signal 采集 | `signals.py`、`schemas/collector-envelope.v1.json` | Grok 文件导入、任意契约采集器导入、手动文本；整批校验、URL/ID/hash 去重 |
-| X Bookmarks | `bookmarks.py`、`twitter_cli.py` | 读取 `twitter bookmarks --json`，初次最多 200、增量默认 50、dry-run、运行清单、幂等入库 |
+| X Bookmarks | `bookmarks.py`、`twitter_cli.py` | 读取 `twitter bookmarks --json`，初次最多 200、增量默认 50、dry-run、健康状态、幂等入库；完整快照可显式对账 |
 | Grok 热点 | `prompts/grok-collector.md` | Grok Build 输出 Envelope JSON，再由 `nextx collect --source grok` 导入 |
-| Today | `views.py` | 10 条自动候选 + 2 条手动位置；排除已裁决；单作者最多 2 条；生成 Bookmark Inbox |
-| 深度拆解 | `analysis.py` | 只读取一个选定 Signal，生成事实/原帖观点/推断、结构、钩子、传播机制等分析 Brief |
-| 选题裁决 | `decisions.py` | `do/defer/kill` 三态；`do` 必须有角度、原创增量、风险、证据确认；生成 topic-engine Brief |
-| 草稿与发布 | `artifacts.py` | 仅 `do` 可生成 x-tweet-writer Brief；保存定稿；人工发布后校验并记录 X URL |
-| Outcome 与周复盘 | `learning.py` | 手动录入 24h/7d 指标；同窗口替换；7d 后 measured；生成 Weekly Review 和最多 5 个提案槽 |
+| Today | `views.py` | 10 条自动候选 + 2 条手动位置；按 Self 匹配、原创增量、证据、时效解释性排序，近重复去重，defer 到期复访；生成 Bookmark Inbox |
+| 深度拆解 | `analysis.py` | 只读取一个选定 Signal，生成并持久化事实/原帖观点/推断、结构、钩子、传播机制等分析 |
+| 选题裁决 | `decisions.py` | `do/defer/kill` 三态；`do` 必须有角度、原创增量、风险和可回溯的逐字证据；生成 topic-engine Brief |
+| 草稿与发布 | `artifacts.py` | 仅 `do` 可生成 x-tweet-writer Brief；保存定稿；三项检查清单 + 显式确认后才可回填人工发布的 X URL |
+| Outcome 与周复盘 | `learning.py` | 手动录入 1h/24h/7d 指标与人工增长观察；同窗口替换；7d 后 measured；按执行模式 × 增长目标生成记分卡，并以三条同类样本作为 Playbook 提案门槛 |
 | Agent Skill | `skills/nextx/SKILL.md` | 一份 canonical Skill 路由所有意图；topic-engine 和 x-tweet-writer 仍由外部 Skill 负责 |
 | 性能与可靠性 | `views.py`、`vault.py` | 可重建 `.nextx/index.json`；10,000 条 Signal 增量 Today 实测约 109ms |
 | 调度模板 | `examples/com.nextx.bookmarks.plist` | macOS launchd 每 180 秒轮询；需要替换绝对路径和完成账号认证 |
@@ -47,9 +49,9 @@ Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第�
 ### 目前不是“完全自动化”的部分
 
 1. **Grok 不是 NextX 内置 SDK。** 先让 Grok Build 按 Prompt 输出 JSON，再导入；这样采集器可替换，避免绑定私有接口。
-2. **深拆是 Brief 交接。** `analysis-brief` 把单条 Signal 交给当前 Agent 分析，但不会自动把分析结果写回 Signal。需要人工确认后再走 Decision。
+2. **深拆先交接、后显式保存。** `analysis-brief` 把单条 Signal 交给当前 Agent 分析；用 `save-analysis` 校验 JSON 后写回机器托管的深拆区，原始帖和用户笔记不被改写。
 3. **Bookmarks 是在线准实时轮询。** X 没有公开 Bookmark webhook，launchd 在线时每 180 秒调用一次；休眠期间暂停。
-4. **Outcome 是手动回填。** 代码验证 24h/7d 格式和非负指标，但不会凭空读取 X 指标。
+4. **Outcome 是手动回填。** 代码验证 1h/24h/7d 格式、非负指标和 Growth Loop 的人工反馈字段，但不会凭空读取 X 指标，也不将观察表述为因果。
 5. **真实 Bookmark 当前有环境阻塞。** 如果 twitter-cli Cookie 提取失败，fixture 测试仍可通过，但真实 smoke/dry-run 不能算完成。
 6. **`twitter-cli` 是可选能力。** `doctor --no-smoke` 在没有 `twitter` 二进制时仍可通过；只有真实 smoke 检查才要求 Bookmark 能力完整。
 
@@ -69,7 +71,7 @@ Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第�
 - Grok Build：首选开放式热点发现器。
 - `topic-engine`：选题判断。
 - `x-tweet-writer`：三温度推文写作。
-- Codex CLI 或 Claude Code：运行 canonical Agent Skill。
+- Codex、Claude Code 或 Grok Build：运行同一份 canonical Agent Skill。
 
 ## 4. 推荐安装方式：一键安装
 
@@ -79,10 +81,10 @@ Outcome 嵌在 Artifact 内，Learn 是 Weekly Review 过程，不会创建第�
 ./install-nextx
 ```
 
-Codex、Claude Code、Grok Build 都调用这一个入口，不维护各自的安装逻辑。若只拿到了 Skill 目录，则使用等价命令：
+Codex、Claude Code、Grok Build 都调用这一个入口，不维护各自的工作流文案。安装器会自动识别 Agent：Codex 与 Grok Build 共享 `~/.agents/skills/nextx`，Claude Code 使用 `~/.claude/skills/nextx`（或 `CLAUDE_CONFIG_DIR`）。若只拿到了 Skill 目录，先解析 `SKILL.md` 所在的绝对目录，再使用其自带入口：
 
 ```bash
-python3 skills/nextx/scripts/bootstrap.py
+/absolute/path/to/nextx/scripts/install-nextx --json
 ```
 
 终端用户默认得到中文下一步提示；Agent 必须使用 JSON 模式：
@@ -95,10 +97,11 @@ python3 skills/nextx/scripts/bootstrap.py
 
 1. 选择当前可用的 Python 3.11+；
 2. 在 `~/.local/share/nextx/venv` 创建用户级隔离环境；
-3. 源码仓库创建指向 `src/` 的隔离 launcher（无需网络）；发布版 Skill 安装/升级 `pip`、`setuptools`、`wheel` 后安装 `nextx-workbench`；
+3. 源码仓库创建指向 `src/` 的隔离 launcher（无需网络）；独立 Skill 会把按 `repository + ref` 隔离的源码缓存写入 runtime 同级 `sources/`，优先 Git clone；若未安装 Git 且目标是 GitHub HTTPS 仓库，则安全下载受 50 MiB 限制的源码归档后创建 launcher，不复用 PATH 中的同名程序；
 4. 在用户级 `~/.local/bin` 暴露 `nextx` 入口，并同时输出 runtime 的 `executable` 路径。
+5. 将完整 canonical Skill 安装到已检测到的 Agent 根目录；JSON 中的 `agent_skills` 给出每端的检测、路径与冲突状态。
 
-安装器不写系统 Python、不写 Vault、不安装或认证 `twitter-cli`。源码 launcher 会随仓库代码更新而生效；发布版 Skill 没有源码时才走 pip 包安装。
+安装器不写系统 Python、不写 Vault、不安装或认证 `twitter-cli`。默认 `--agents auto` 只写入检测到的 Agent；在尚未启动/安装目标 Agent 的机器上，可以显式使用 `--agents all`。若发现手工维护的同名 Skill，安装器返回 `conflict` 而不覆盖；只有明确指定 `--force-agent-skills` 才会替换。独立安装在 JSON 中记录 `repository`、`ref`、`source_transport`；通过 Git 下载时还记录 `source_revision`。默认 ref 是 `main`，追求可复现时应传入已审阅的 tag 或 branch。
 
 若当前 shell 尚未把用户级 bin 目录加入 PATH，执行一次：
 
@@ -108,11 +111,30 @@ export PATH="$HOME/.local/bin:$PATH"
 
 Agent 不依赖 PATH：读取 JSON 的 `nextx` 字段；当 `command_exposed` 为 false 时回退到 `executable`。
 
+对 Agent 工作流先运行只读预检；它不会初始化 Vault 或改变收藏状态。按需声明当前 Agent 能力，或用 `--skills-root` 验证实际的 Skill 目录：
+
+```bash
+nextx preflight --intent collect-grok --agent-capability grok-build
+nextx preflight --intent decision --agent-capability topic-engine
+nextx preflight --intent draft --agent-capability x-tweet-writer
+nextx contracts
+```
+
+`nextx contracts --name NAME` 和 `nextx collector-prompt --source grok` 返回当前运行时内的绝对路径，因此已安装的 Skill 不需要猜测仓库或当前工作目录。
+
 可先检查而不写入：
 
 ```bash
 ./install-nextx --dry-run
 ```
+
+### 4.0.1 对话初始化验收
+
+安装器报告对应 Agent 的 Skill 为 `installed`、`updated` 或 `unchanged` 后，在该 Agent 的新会话中只发送：
+
+> 初始化 NextX
+
+Skill 会将此视为对默认 Vault 初始化的明确授权，执行 `next-step → setup（如有需要）→ next-step`，然后收集不可替代的 Self 信息。定位、禁区和声纹必须由用户提供，不能由 Agent 自动补全。已打开但未显示新 Skill 的会话应重启；Grok Build 可用 `grok inspect --json` 查看发现结果。
 
 ### 4.1 手动开发安装（备用）
 
@@ -209,7 +231,7 @@ python -c "import setuptools; print(setuptools.__version__)"
 PYTHONPATH="$NEXTX_ROOT/src" "$NEXTX_PYTHON" -m unittest discover -s "$NEXTX_ROOT/tests" -v
 ```
 
-当前基线应为 **59 项测试全部通过**。测试覆盖：Vault 锁、frontmatter、Self、Signal、Bookmarks 解析与幂等、CLI JSON、默认 Vault 配置、bootstrap dry-run/launcher、自愈、统一安装入口、人类/JSON 安装输出、Today、Analysis、Decision、Artifact、Outcome、Weekly Review、索引重建和 twitter-cli 失败路径。
+运行全部测试并以 CI 输出为准。测试覆盖：Vault 锁、frontmatter、Self 就绪度与账号隔离、Signal、Bookmarks 解析/对账/健康、CLI JSON 与标准输入、Today 排序/去重/复访、Analysis 持久化、Decision、Artifact 发布闸门、Outcome、实验复盘、索引重建、提示注入边界、证据校验、独立仓库安装、跨平台 launcher 和 twitter-cli 失败路径。另执行 `python scripts/validate_skill.py` 验证 canonical Skill 的路径、预检和契约语义。
 
 macOS 调度模板还要验证：
 
@@ -272,9 +294,12 @@ ARTIFACT_JSON="$TEST_VAULT/artifact-result.json"
 ARTIFACT_ID="$("$NEXTX_PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$ARTIFACT_JSON")"
 ```
 
-模拟人工发布和 7d 回写：
+模拟人工发布、确认和 7d 回写：
 
 ```bash
+sed -i '' 's/- \[ \]/- [x]/g' "$TEST_VAULT/03. Artifact/"*.md
+"$NEXTX" mark-review-ready --vault "$TEST_VAULT" "$ARTIFACT_ID"
+"$NEXTX" confirm-publish --vault "$TEST_VAULT" "$ARTIFACT_ID" --yes
 "$NEXTX" record-published --vault "$TEST_VAULT" "$ARTIFACT_ID" \
   --url "https://x.com/example/status/9001"
 
@@ -287,7 +312,12 @@ cat > "$TEST_VAULT/outcome.json" <<'JSON'
   "likes": 48,
   "replies": 9,
   "reposts": 12,
-  "bookmarks": 21
+  "bookmarks": 21,
+  "growth_signals": {
+    "follow_up_completed": true,
+    "non_follower_replies": 2,
+    "observations": ["A reader asked for the decision template."]
+  }
 }
 JSON
 
@@ -297,7 +327,7 @@ JSON
 sed -n '1,160p' "$TEST_VAULT/04. Views/Weekly Review.md"
 ```
 
-预期：Artifact 状态为 `measured`，Weekly Review 显示 `做：1`、一个 measured Artifact、草稿时延和五个提案槽。整个流程不会发布到 X。
+预期：Artifact 状态为 `measured`，Weekly Review 显示 `做：1`、一个 measured Artifact、草稿时延和同类记分卡；单一样本只保留待验证假设。整个流程不会发布到 X。
 
 ## 7. 真实账号首次验收
 
@@ -322,7 +352,7 @@ sed -n '1,160p' "$TEST_VAULT/04. Views/Weekly Review.md"
   --limit 1 --dry-run
 ```
 
-预期：返回 `ok: true`、`dry_run: true`，Vault 中不应新增 Signal。确认无误后再正式同步：
+预期：返回 `ok: true`、`dry_run: true`，Vault 中不应新增 Signal。即使 Collector 读取失败，dry-run 也不会创建 Vault 或写入 Bookmark 健康记录。确认无误后再正式同步：
 
 ```bash
 "$NEXTX" collect --vault "$NEXTX_VAULT" --source bookmarks
@@ -330,9 +360,11 @@ sed -n '1,160p' "$TEST_VAULT/04. Views/Weekly Review.md"
 
 首轮默认最多读取 200 条，后续根据 `.nextx/bookmarks-state.json` 默认读取 50 条。相同 Tweet ID 会返回 duplicate，不覆盖用户编辑。
 
+若导入的是确认完整的收藏快照，可再加 `--reconcile`；输入 JSON 必须同时含有 `"snapshot_complete": true`，否则 NextX 会拒绝执行。NextX 仅把缺失项目标为 `bookmark_active: false`，不删除原始 Markdown 或人工笔记。普通增量同步绝不能使用该参数。`nextx doctor` 会显示最近 Bookmark 同步的本地健康状态。
+
 ### 7.3 Grok 热点采集
 
-把 [Grok Collector Prompt](../prompts/grok-collector.md) 提供给 Grok Build，并要求只输出 JSON。先检查 JSON 满足 [Collector Schema](../schemas/collector-envelope.v1.json)，再导入：
+从源码运行时可把 [Grok Collector Prompt](../prompts/grok-collector.md) 提供给 Grok Build；已安装的 Skill 则运行 `nextx collector-prompt --source grok` 并读取返回路径。先用 `nextx contracts --name collector` 检查 JSON 契约，再导入：
 
 ```bash
 "$NEXTX" collect --vault "$NEXTX_VAULT" --source grok \
@@ -356,7 +388,7 @@ sed -n '1,160p' "$TEST_VAULT/04. Views/Weekly Review.md"
 04. Views/Bookmark Inbox.md
 ```
 
-Today 只保留最多 10 条自动候选和 2 条手动候选；已存在 Decision 关联的 Signal 不再进入待裁决队列。
+Today 只保留最多 10 条自动候选和 2 条手动候选；自动候选按 Self 匹配、原创增量、证据质量、时效和有限动量排序，并显示“为什么是今天”。同内容近重复和同作者过量内容会被压掉。`defer` 在 `revisit_at` 到期之前不会出现，届时带“复访已到期”重新出现。
 
 ### 第二步：单帖深拆
 
@@ -366,7 +398,12 @@ Today 只保留最多 10 条自动候选和 2 条手动候选；已存在 Decisi
 "$NEXTX" analysis-brief --vault "$NEXTX_VAULT" x:123456789
 ```
 
-把输出交给 Agent，要求只分析该 Signal，并分离：事实、原帖观点、推断、内容结构、钩子、传播机制、可迁移方法、风险与反证。分析结果先作为判断材料，不要直接当作 Decision。
+把输出交给 Agent，要求只分析该 Signal，并分离：事实、原帖观点、推断、内容结构、钩子、传播机制、可迁移方法、风险与反证。Brief 会保存到 `.nextx/handoffs/analysis-<id>.md`；将 Agent JSON 用下列方式显式写回，再作为 Decision 判断材料：
+
+```bash
+"$NEXTX" save-analysis --vault "$NEXTX_VAULT" --input-json /absolute/path/to/analysis.json
+# 或让 Agent 直接通过标准输入交接：... | "$NEXTX" save-analysis --vault "$NEXTX_VAULT" --input-json -
+```
 
 ### 第三步：做 / 缓 / 毙
 
@@ -381,7 +418,7 @@ Today 只保留最多 10 条自动候选和 2 条手动候选；已存在 Decisi
   --input-json /absolute/path/to/decision.json
 ```
 
-`do` 必须提供证据、角度、原创增量、风险和理由；`defer`/`kill` 只需要理由码和理由。保存后检查：
+`do` 必须提供证据、角度、原创增量、风险和理由；可选 `experiment: {id, hypothesis, metric: "engagement_rate"}` 用于后续归因。`defer` 必须提供理由码、理由、带时区的未来 `revisit_at` 与 `revisit_reason`；`kill` 只需要理由码和理由。保存后检查：
 
 ```text
 02. Decision/<decision-id>.md
@@ -415,16 +452,18 @@ Today 只保留最多 10 条自动候选和 2 条手动候选；已存在 Decisi
 
 ### 第五步：人工发布并回填
 
-NextX 不打开发布权限。用户在 X 人工确认事实、链接、声纹和禁区后发布，再记录 URL：
+NextX 不打开发布权限。先在 Obsidian 勾选 Artifact 的三个发布检查项；再让 CLI 记录 review 与用户的显式确认。用户在 X 完成人工发布后，才回填 URL：
 
 ```bash
+"$NEXTX" mark-review-ready --vault "$NEXTX_VAULT" artifact:...
+"$NEXTX" confirm-publish --vault "$NEXTX_VAULT" artifact:... --yes
 "$NEXTX" record-published --vault "$NEXTX_VAULT" artifact:... \
   --url "https://x.com/handle/status/123456789"
 ```
 
 ### 第六步：结果回写
 
-24h 或 7d 后准备指标 JSON：
+在 1h、24h 或 7d 后准备指标 JSON：
 
 ```json
 {
@@ -444,7 +483,7 @@ NextX 不打开发布权限。用户在 X 人工确认事实、链接、声纹�
   --input-json /absolute/path/to/outcome.json
 ```
 
-7d 回写会把 Artifact 状态变成 `measured`。同一窗口再次回写会替换旧快照，不会产生重复记录。
+7d 回写会把 Artifact 状态变成 `measured`。同一窗口再次回写会替换旧快照，不会产生重复记录；周报只比较 7d 快照，1h/24h 仅作为早期信号保留。
 
 ## 9. 每周复盘
 
@@ -507,7 +546,7 @@ launchctl bootout "gui/$(id -u)/com.nextx.bookmarks"
 01. Signal/     Grok、Bookmarks、手动素材的归一化记录
 02. Decision/   做 / 缓 / 毙及证据和理由
 03. Artifact/  草稿、发布 URL、Outcome
-04. Views/      Today、Bookmark Inbox、Decision Board、Weekly Review
+04. Views/      Growth Loop、Today、Quote Sprint、Reply Sprint、Bookmark Inbox、Decision Board、Weekly Review
 .nextx/         config、state、运行清单、写锁、可重建 index
 ```
 
@@ -525,7 +564,7 @@ launchctl bootout "gui/$(id -u)/com.nextx.bookmarks"
 | `python` 版本低于 3.11 | 不满足项目元数据 | 使用 Python 3.11+ 的 venv |
 | `twitter_binary: missing` | 找不到 `twitter` 命令 | 安装 twitter-cli，并确认 `which twitter` 能找到 |
 | `Twitter cookie extraction failed` | X 登录 Cookie 不可用 | 重新认证 twitter-cli；暂用 Grok/手动导入 |
-| `Another NextX sync is already running` | Vault 写锁存在 | 先确认没有同步进程，再处理 `.nextx/sync.lock` |
+| `Another NextX sync is already running` | Vault 写锁存在 | 先确认没有同步进程，再运行 `nextx recover-lock`；仅对无 owner 旧锁人工确认后使用 `--force` |
 | Collector 被拒绝 | schema、account_key、source_id/URL 或字段缺失 | 对照 Collector Schema 修正后整批重试 |
 | `Signal not found` | ID 不存在或格式不对 | 使用 `x:数字` 或从 Today 卡片复制 ID |
 | `Only a do Decision can create an Artifact` | Decision 是 defer/kill | 先建立新的 do Decision，不能绕过闸门 |
@@ -536,11 +575,11 @@ launchctl bootout "gui/$(id -u)/com.nextx.bookmarks"
 
 ## 13. 完成判定
 
-可以把本机 v0.1 视为“代码完成、真实运营待验证”，必须同时满足：
+可以把本机 v0.2 视为“代码完成、真实运营待验证”，必须同时满足：
 
 1. `nextx --help` 正常。
 2. `nextx init` 能创建 Vault 和 Self 模板。
-3. 59 项测试全部通过。
+3. 所有测试和 `python scripts/validate_skill.py` 全部通过。
 4. fixture 纵向流程能生成 Decision、Artifact、measured Outcome 和 Weekly Review。
 5. `doctor --no-smoke` 通过。
 6. 如果要启用 Bookmark 轮询，真实 `doctor` smoke 和 Bookmark dry-run 也必须通过。

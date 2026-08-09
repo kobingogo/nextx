@@ -4,8 +4,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from nextx.bookmarks import sync_bookmarks
+from nextx.bookmarks import read_bookmark_health, sync_bookmarks
 from nextx.records import read_frontmatter
+from nextx.signals import signal_filename
 from nextx.vault import read_state
 
 
@@ -24,7 +25,7 @@ class BookmarkSyncTests(unittest.TestCase):
 
             report = sync_bookmarks(vault, fixture_payload(), now=NOW)
 
-            first = vault / "01. Signal" / "x-2084556671712477485.md"
+            first = vault / "01. Signal" / signal_filename("x:2084556671712477485")
             self.assertEqual(report.created, 2)
             self.assertTrue(first.exists())
             self.assertIn('analysis_status: "pending"', first.read_text(encoding="utf-8"))
@@ -41,7 +42,7 @@ class BookmarkSyncTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             sync_bookmarks(vault, fixture_payload(), now=NOW)
-            first = vault / "01. Signal" / "x-2084556671712477485.md"
+            first = vault / "01. Signal" / signal_filename("x:2084556671712477485")
             original = first.read_text(encoding="utf-8") + "\nmanual note\n"
             first.write_text(original, encoding="utf-8")
 
@@ -71,8 +72,48 @@ class BookmarkSyncTests(unittest.TestCase):
 
             self.assertTrue(report.dry_run)
             self.assertEqual(report.created, 2)
-            self.assertFalse((vault / "01. Signal" / "x-2084556671712477485.md").exists())
+            self.assertFalse(
+                (vault / "01. Signal" / signal_filename("x:2084556671712477485")).exists()
+            )
             self.assertIsNone(read_state(vault)["last_success_at"])
+
+    def test_explicit_reconciliation_marks_absent_bookmarks_inactive(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            sync_bookmarks(vault, fixture_payload(), now=NOW)
+            reduced = fixture_payload()
+            reduced["data"] = reduced["data"][:1]
+            reduced["snapshot_complete"] = True
+
+            report = sync_bookmarks(
+                vault,
+                reduced,
+                reconcile=True,
+                snapshot_complete=True,
+                now=NOW.replace(hour=11),
+            )
+            retained, _ = read_frontmatter(
+                vault / "01. Signal" / signal_filename("x:2084556671712477485")
+            )
+            removed, _ = read_frontmatter(
+                vault / "01. Signal" / signal_filename("x:2084556671712477486")
+            )
+
+            self.assertEqual(report.refreshed, 1)
+            self.assertEqual(report.deactivated, 1)
+            self.assertTrue(retained["bookmark_active"])
+            self.assertFalse(removed["bookmark_active"])
+            self.assertEqual(read_bookmark_health(vault)["status"], "ready")
+
+    def test_reconciliation_rejects_an_unproven_partial_snapshot(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            sync_bookmarks(vault, fixture_payload(), now=NOW)
+            reduced = fixture_payload()
+            reduced["data"] = reduced["data"][:1]
+
+            with self.assertRaisesRegex(ValueError, "complete snapshot"):
+                sync_bookmarks(vault, reduced, reconcile=True, now=NOW.replace(hour=11))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextx.local/schemas/artifact-input.v1.json",
+  "title": "NextX Artifact Input v1",
+  "type": "object",
+  "required": ["schema_version", "account_key", "decision_id", "format", "draft"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "account_key": {"const": "primary"},
+    "decision_id": {"type": "string", "minLength": 1},
+    "format": {"type": "string", "minLength": 1},
+    "draft": {"type": "string", "minLength": 1},
+    "thread_pack": {
+      "type": "object",
+      "required": ["posts", "cta"],
+      "additionalProperties": false,
+      "properties": {
+        "posts": {"type": "array", "minItems": 2, "maxItems": 25, "items": {"type": "string", "minLength": 1, "maxLength": 25000}},
+        "cta": {"type": "string", "minLength": 1, "maxLength": 600}
+      }
+    },
+    "asset_manifest": {
+      "type": "array",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["role", "purpose", "prompt", "alt_text"],
+        "properties": {
+          "role": {"enum": ["cover", "supporting", "diagram"]},
+          "purpose": {"type": "string", "minLength": 1, "maxLength": 600},
+          "prompt": {"type": "string", "minLength": 1, "maxLength": 4000},
+          "alt_text": {"type": "string", "minLength": 1, "maxLength": 1000},
+          "local_path": {"type": "string", "minLength": 1, "maxLength": 2048}
+        }
+      }
+    },
+    "follow_up_tasks": {"type": "array", "minItems": 2, "maxItems": 6, "items": {"type": "string", "minLength": 1, "maxLength": 600}}
+  },
+  "allOf": [
+    {"if": {"properties": {"format": {"enum": ["thread", "thread-post"]}}, "required": ["format"]}, "then": {"required": ["thread_pack"]}}
+  ]
+}

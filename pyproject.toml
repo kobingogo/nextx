@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nextx-workbench"
-version = "0.1.0"
-description = "Local-first X editorial decision workbench"
+version = "0.3.0"
+description = "Local-first X growth decision workbench"
 requires-python = ">=3.11"
 dependencies = []
 

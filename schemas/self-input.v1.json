@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextx.local/schemas/self-input.v1.json",
+  "title": "NextX Self Configuration Input v1",
+  "type": "object",
+  "required": ["schema_version", "account_key", "positioning", "audience", "stage", "pillars", "boundaries", "voice_samples"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "account_key": {"const": "primary"},
+    "positioning": {"type": "string", "minLength": 1, "maxLength": 600},
+    "audience": {"type": "string", "minLength": 1, "maxLength": 600},
+    "stage": {"type": "string", "minLength": 1, "maxLength": 120},
+    "pillars": {"type": "array", "minItems": 3, "maxItems": 4, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 160}},
+    "boundaries": {"type": "string", "minLength": 1, "maxLength": 1200},
+    "voice_samples": {"type": "array", "minItems": 1, "maxItems": 10, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1200}},
+    "goals": {"type": "string", "maxLength": 1200},
+    "growth_strategy": {
+      "type": "object",
+      "required": ["stage", "objective", "target_reader", "profile_promise", "cta", "weekly_focus", "lane_allocation"],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {"enum": ["launch", "ramp", "steady"]},
+        "objective": {"enum": ["awareness", "authority", "conversion"]},
+        "target_reader": {"type": "string", "minLength": 1, "maxLength": 600},
+        "profile_promise": {"type": "string", "minLength": 1, "maxLength": 600},
+        "cta": {"type": "string", "minLength": 1, "maxLength": 400},
+        "weekly_focus": {"type": "string", "minLength": 1, "maxLength": 600},
+        "lane_allocation": {
+          "type": "object",
+          "required": ["discovery", "authority", "conversion"],
+          "additionalProperties": false,
+          "properties": {
+            "discovery": {"type": "integer", "minimum": 0, "maximum": 7},
+            "authority": {"type": "integer", "minimum": 0, "maximum": 7},
+            "conversion": {"type": "integer", "minimum": 0, "maximum": 7}
+          }
+        }
+      }
+    }
+  }
+}

@@ -7,9 +7,9 @@
   "properties": {
     "schema_version": {"const": 1},
     "account_key": {"const": "primary"},
-    "collector": {"type": "string", "minLength": 1},
-    "query": {"type": ["string", "null"]},
-    "retrieved_at": {"type": "string", "minLength": 1},
+    "collector": {"type": "string", "minLength": 1, "maxLength": 128},
+    "query": {"type": ["string", "null"], "maxLength": 4000},
+    "retrieved_at": {"type": "string", "format": "date-time", "maxLength": 64},
     "items": {
       "type": "array",
       "items": {
@@ -20,18 +20,77 @@
           {"required": ["source_url"]}
         ],
         "properties": {
-          "source_id": {"type": "string", "minLength": 1},
-          "platform": {"type": "string", "minLength": 1},
-          "source_url": {"type": ["string", "null"]},
-          "author_handle": {"type": ["string", "null"]},
-          "published_at": {"type": ["string", "null"]},
-          "text": {"type": "string", "minLength": 1},
+          "source_id": {"type": "string", "minLength": 1, "maxLength": 256},
+          "platform": {"type": "string", "minLength": 1, "maxLength": 64},
+          "source_url": {"type": ["string", "null"], "maxLength": 2048},
+          "author_handle": {"type": ["string", "null"], "maxLength": 64},
+          "published_at": {"type": ["string", "null"], "format": "date-time", "maxLength": 64},
+          "text": {"type": "string", "minLength": 1, "maxLength": 50000},
           "metrics": {"type": "object"},
           "media": {"type": "array"},
           "source_confidence": {"enum": ["high", "medium", "low"]},
-          "discovery_reason": {"type": ["string", "null"]}
-        }
-      }
+          "discovery_reason": {"type": ["string", "null"], "maxLength": 4000},
+          "why_today": {"type": ["string", "null"], "maxLength": 1000},
+          "self_fit": {"type": "integer", "minimum": 0, "maximum": 5},
+          "novelty": {"type": "integer", "minimum": 0, "maximum": 5},
+          "quote_candidate": {"type": "boolean"},
+          "quote_window_ends_at": {"type": ["string", "null"], "format": "date-time", "maxLength": 64},
+          "reply_candidate": {"type": "boolean"},
+          "reply_window_ends_at": {"type": ["string", "null"], "format": "date-time", "maxLength": 64}
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"platform": {"const": "x"}},
+              "required": ["platform"]
+            },
+            "then": {
+              "required": ["source_url"],
+              "properties": {
+                "source_url": {
+                  "type": "string",
+                  "pattern": "^https://(?:www\\.)?(?:x\\.com|twitter\\.com)/[A-Za-z0-9_]{1,15}/status/\\d+(?:[/?#].*)?$"
+                }
+              }
+            }
+          }
+          ,
+          {
+            "if": {
+              "properties": {"quote_candidate": {"const": true}},
+              "required": ["quote_candidate"]
+            },
+            "then": {
+              "required": ["source_url", "author_handle", "published_at", "quote_window_ends_at"],
+              "properties": {
+                "platform": {"const": "x"},
+                "source_url": {"type": "string", "pattern": "^https://(?:www\\.)?(?:x\\.com|twitter\\.com)/[A-Za-z0-9_]{1,15}/status/\\d+(?:[/?#].*)?$"},
+                "author_handle": {"type": "string", "minLength": 1},
+                "published_at": {"type": "string", "format": "date-time"},
+                "quote_window_ends_at": {"type": "string", "format": "date-time"}
+              }
+            }
+          }
+          ,
+          {
+            "if": {
+              "properties": {"reply_candidate": {"const": true}},
+              "required": ["reply_candidate"]
+            },
+            "then": {
+              "required": ["source_url", "author_handle", "published_at", "reply_window_ends_at"],
+              "properties": {
+                "platform": {"const": "x"},
+                "source_url": {"type": "string", "pattern": "^https://(?:www\\.)?(?:x\\.com|twitter\\.com)/[A-Za-z0-9_]{1,15}/status/\\d+(?:[/?#].*)?$"},
+                "author_handle": {"type": "string", "minLength": 1},
+                "published_at": {"type": "string", "format": "date-time"},
+                "reply_window_ends_at": {"type": "string", "format": "date-time"}
+              }
+            }
+          }
+        ]
+      },
+      "maxItems": 500
     }
   }
 }

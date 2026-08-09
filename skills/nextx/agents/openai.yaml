@@ -1,4 +1,4 @@
 interface:
   display_name: "NextX Workbench"
-  short_description: "Run the local-first X editorial decision loop"
-  default_prompt: "Use $nextx to install or initialize NextX, then run today’s X signal-to-draft workflow."
+  short_description: "Run the local-first X Growth Loop for one account"
+default_prompt: "Use $nextx to inspect NextX readiness and explain one safe, human-controlled next growth action; do not install or initialize unless I ask; do not collect, interact, or publish unless I ask."

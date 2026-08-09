@@ -1,4 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 import json
 from pathlib import Path
@@ -6,7 +7,11 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from nextx.cli import main
+from nextx.bookmarks import read_bookmark_health
+from nextx.cli import _load_input, main
+from nextx.records import update_frontmatter
+from nextx.self_model import configure_self
+from nextx.twitter_cli import TwitterCLIError
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "bookmarks.json"
@@ -23,6 +28,13 @@ def run_cli(arguments):
 
 
 class CLITests(unittest.TestCase):
+    def test_version_returns_a_structured_installed_version(self):
+        code, stdout, stderr = run_cli(["version"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(json.loads(stdout)["version"], "0.3.0")
+
     def test_setup_and_config_work_without_vault_argument(self):
         with TemporaryDirectory() as tmp:
             config_home = Path(tmp) / "config"
@@ -56,6 +68,13 @@ class CLITests(unittest.TestCase):
             self.assertTrue(result["ok"])
             self.assertEqual(result["schema_version"], 1)
             self.assertEqual(result["command"], "init")
+
+    def test_argument_errors_are_structured_json(self):
+        code, stdout, stderr = run_cli(["not-a-command"])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout, "")
+        self.assertFalse(json.loads(stderr)["ok"])
 
     def test_sync_accepts_fixture_without_calling_twitter(self):
         with TemporaryDirectory() as tmp:
@@ -176,7 +195,19 @@ class CLITests(unittest.TestCase):
             save_code, save_stdout, _ = run_cli(
                 ["save-artifact", "--vault", tmp, "--input-json", str(draft_file)]
             )
-            artifact_id = json.loads(save_stdout)["id"]
+            artifact_result = json.loads(save_stdout)
+            artifact_id = artifact_result["id"]
+            artifact_path = Path(artifact_result["path"])
+            artifact_path.write_text(
+                artifact_path.read_text(encoding="utf-8").replace("- [ ]", "- [x]"),
+                encoding="utf-8",
+            )
+            ready_code, _, _ = run_cli(
+                ["mark-review-ready", "--vault", tmp, artifact_id]
+            )
+            confirm_code, _, _ = run_cli(
+                ["confirm-publish", "--vault", tmp, artifact_id, "--yes"]
+            )
             publish_code, publish_stdout, publish_stderr = run_cli(
                 [
                     "record-published",
@@ -190,10 +221,17 @@ class CLITests(unittest.TestCase):
 
             self.assertEqual(brief_code, 0)
             self.assertIn("x-tweet-writer", json.loads(brief_stdout)["brief"])
+            self.assertTrue(Path(json.loads(brief_stdout)["handoff_path"]).exists())
             self.assertEqual(save_code, 0)
+            self.assertEqual(ready_code, 0)
+            self.assertEqual(confirm_code, 0)
             self.assertEqual(publish_code, 0)
             self.assertEqual(publish_stderr, "")
             self.assertEqual(json.loads(publish_stdout)["status"], "published")
+            update_frontmatter(
+                artifact_path,
+                {"published_at": (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()},
+            )
 
             outcome_file = Path(tmp) / "outcome.json"
             outcome_file.write_text(
@@ -207,6 +245,11 @@ class CLITests(unittest.TestCase):
                         "replies": 4,
                         "reposts": 6,
                         "bookmarks": 8,
+                        "growth_signals": {
+                            "follow_up_completed": True,
+                            "non_follower_replies": 2,
+                            "observations": ["A new reader asked for the template."],
+                        },
                     }
                 ),
                 encoding="utf-8",
@@ -273,6 +316,321 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertTrue(result["ok"])
             self.assertEqual(result["checks"]["twitter_binary"], "missing")
+
+    @patch("nextx.preflight.shutil.which", return_value=None)
+    def test_preflight_is_read_only_and_reports_missing_dependencies(self, _which):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            code, stdout, stderr = run_cli(
+                ["preflight", "--vault", str(vault), "--intent", "daily"]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 1)
+            self.assertEqual(stderr, "")
+            self.assertFalse(result["ok"])
+            self.assertTrue(result["read_only"])
+            self.assertFalse(vault.exists())
+            self.assertFalse(any("Agent 能力" in blocker for blocker in result["blockers"]))
+
+    @patch("nextx.preflight.shutil.which", return_value="/usr/local/bin/twitter")
+    def test_preflight_accepts_verified_skill_path(self, _which):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            run_cli(["setup", "--vault", str(vault), "--yes"])
+            self_dir = vault / "00. Self"
+            profile = self_dir / "Profile.md"
+            profile.write_text(profile.read_text(encoding="utf-8").replace("## 一句话定位\n", "## 一句话定位\n\nLocal-first X operations.\n"), encoding="utf-8")
+            voice = self_dir / "Voice.md"
+            voice.write_text(voice.read_text(encoding="utf-8").replace("## 真实优秀样本\n", "## 真实优秀样本\n\nA real original sentence.\n"), encoding="utf-8")
+            pillars = self_dir / "Pillars.md"
+            pillars.write_text(pillars.read_text(encoding="utf-8").replace("1.\n2.\n3.", "1. Product\n2. AI\n3. X" ) + "\nNo spam.\n", encoding="utf-8")
+            skills_root = Path(tmp) / "skills"
+            for name in ("topic-engine", "x-tweet-writer"):
+                target = skills_root / name
+                target.mkdir(parents=True)
+                (target / "SKILL.md").write_text("---\nname: test\n---\n", encoding="utf-8")
+
+            code, stdout, stderr = run_cli(
+                [
+                    "preflight", "--vault", str(vault), "--intent", "daily",
+                    "--skills-root", str(skills_root),
+                ]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertTrue(result["ok"])
+            self.assertEqual(
+                [item["status"] for item in result["checks"]["agents"]],
+                ["ready", "ready"],
+            )
+
+    @patch("nextx.preflight.shutil.which", return_value=None)
+    def test_preflight_uses_bundled_core_when_optional_ayi_skills_are_absent(self, _which):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            configure_self(
+                vault,
+                {
+                    "schema_version": 1,
+                    "account_key": "primary",
+                    "positioning": "Local-first X operations.",
+                    "audience": "Solo builders.",
+                    "stage": "冷启动",
+                    "pillars": ["Product", "AI", "X"],
+                    "boundaries": "No spam.",
+                    "voice_samples": ["A real original sentence."],
+                },
+            )
+
+            code, stdout, stderr = run_cli(
+                ["preflight", "--vault", str(vault), "--intent", "daily"]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertTrue(result["ok"])
+            self.assertEqual(
+                [item["selected_capability"] for item in result["checks"]["agents"]],
+                ["nextx-core", "nextx-core"],
+            )
+
+    def test_preflight_marks_declared_agent_capability_as_unverified(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            run_cli(["init", "--vault", str(vault)])
+
+            code, stdout, stderr = run_cli(
+                [
+                    "preflight", "--vault", str(vault), "--intent", "collect-grok",
+                    "--agent-capability", "grok-build",
+                ]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["checks"]["agents"][0]["status"], "declared")
+            self.assertTrue(any("仅由调用方声明" in warning for warning in result["warnings"]))
+
+    def test_quote_collection_preflight_accepts_an_authorized_read_only_alternative(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            run_cli(["init", "--vault", str(vault)])
+
+            code, stdout, stderr = run_cli(
+                [
+                    "preflight", "--vault", str(vault), "--intent", "collect-quote",
+                    "--agent-capability", "agent-reach",
+                ]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["checks"]["agents"][0]["status"], "declared")
+            self.assertEqual(result["checks"]["agents"][0]["selected_capability"], "agent-reach")
+
+    def test_contract_catalog_exposes_all_agent_input_schemas(self):
+        code, stdout, stderr = run_cli(["contracts"])
+
+        result = json.loads(stdout)
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            {item["name"] for item in result["contracts"]},
+            {"self", "collector", "analysis", "decision", "artifact", "outcome"},
+        )
+        self.assertTrue(all(Path(item["path"]).is_file() for item in result["contracts"]))
+
+    def test_collector_prompt_exposes_a_runtime_absolute_path(self):
+        code, stdout, stderr = run_cli(["collector-prompt", "--source", "grok"])
+
+        result = json.loads(stdout)
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        self.assertTrue(result["ok"])
+        self.assertTrue(Path(result["path"]).is_file())
+
+    def test_quote_sprint_and_quote_brief_are_available_to_agents(self):
+        with TemporaryDirectory() as tmp:
+            quote_fixture = Path(tmp) / "quote-signals.json"
+            payload = json.loads(GROK_FIXTURE.read_text(encoding="utf-8"))
+            collected_at = datetime.now(timezone.utc).replace(microsecond=0)
+            payload["retrieved_at"] = collected_at.isoformat()
+            payload["items"][0].update(
+                {
+                    "published_at": (collected_at - timedelta(hours=1)).isoformat(),
+                    "quote_candidate": True,
+                    "quote_window_ends_at": (collected_at + timedelta(hours=6)).isoformat(),
+                }
+            )
+            quote_fixture.write_text(json.dumps(payload), encoding="utf-8")
+            run_cli(
+                [
+                    "collect", "--vault", tmp, "--source", "grok",
+                    "--input-json", str(quote_fixture),
+                ]
+            )
+
+            sprint_code, sprint_stdout, sprint_stderr = run_cli(["quote-sprint", "--vault", tmp])
+            brief_code, brief_stdout, brief_stderr = run_cli(["quote-brief", "--vault", tmp, "x:3001"])
+            prompt_code, prompt_stdout, prompt_stderr = run_cli(
+                ["collector-prompt", "--source", "quote"]
+            )
+
+            self.assertEqual(sprint_code, 0)
+            self.assertEqual(sprint_stderr, "")
+            self.assertEqual(json.loads(sprint_stdout)["selected_count"], 1)
+            self.assertEqual(brief_code, 0)
+            self.assertEqual(brief_stderr, "")
+            self.assertEqual(json.loads(brief_stdout)["execution_mode"], "quote")
+            self.assertEqual(prompt_code, 0)
+            self.assertEqual(prompt_stderr, "")
+            self.assertTrue(Path(json.loads(prompt_stdout)["path"]).is_file())
+
+    def test_reply_sprint_reply_brief_and_growth_loop_are_available_to_agents(self):
+        with TemporaryDirectory() as tmp:
+            reply_fixture = Path(tmp) / "reply-signals.json"
+            payload = json.loads(GROK_FIXTURE.read_text(encoding="utf-8"))
+            collected_at = datetime.now(timezone.utc).replace(microsecond=0)
+            payload["retrieved_at"] = collected_at.isoformat()
+            payload["items"][0].update(
+                {
+                    "published_at": (collected_at - timedelta(hours=1)).isoformat(),
+                    "reply_candidate": True,
+                    "reply_window_ends_at": (collected_at + timedelta(hours=6)).isoformat(),
+                }
+            )
+            reply_fixture.write_text(json.dumps(payload), encoding="utf-8")
+            run_cli(
+                ["collect", "--vault", tmp, "--source", "grok", "--input-json", str(reply_fixture)]
+            )
+
+            sprint_code, sprint_stdout, sprint_stderr = run_cli(["reply-sprint", "--vault", tmp])
+            brief_code, brief_stdout, brief_stderr = run_cli(["reply-brief", "--vault", tmp, "x:3001"])
+            loop_code, loop_stdout, loop_stderr = run_cli(["growth-loop", "--vault", tmp])
+            prompt_code, prompt_stdout, prompt_stderr = run_cli(
+                ["collector-prompt", "--source", "reply"]
+            )
+
+            self.assertEqual(sprint_code, 0)
+            self.assertEqual(sprint_stderr, "")
+            self.assertEqual(json.loads(sprint_stdout)["selected_count"], 1)
+            self.assertEqual(brief_code, 0)
+            self.assertEqual(brief_stderr, "")
+            self.assertEqual(json.loads(brief_stdout)["execution_mode"], "reply")
+            self.assertEqual(loop_code, 0)
+            self.assertEqual(loop_stderr, "")
+            self.assertEqual(json.loads(loop_stdout)["next_action"]["id"], "configure_self")
+            self.assertEqual(prompt_code, 0)
+            self.assertEqual(prompt_stderr, "")
+            self.assertTrue(Path(json.loads(prompt_stdout)["path"]).is_file())
+
+    def test_stdin_input_and_account_status_are_available_to_agents(self):
+        with TemporaryDirectory() as tmp:
+            with patch("nextx.cli.sys.stdin", StringIO('{"schema_version":1}')):
+                self.assertEqual(_load_input(Path("-")), {"schema_version": 1})
+            code, stdout, stderr = run_cli(["account-status", "--vault", tmp])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["active_account"], "primary")
+            self.assertEqual(result["multi_account_routing"], "not_enabled")
+
+    def test_live_bookmark_failure_is_recorded_in_local_health(self):
+        with TemporaryDirectory() as tmp:
+            with patch(
+                "nextx.cli.fetch_bookmarks",
+                side_effect=TwitterCLIError("authentication required"),
+            ):
+                code, stdout, stderr = run_cli(
+                    ["sync-bookmarks", "--vault", tmp, "--limit", "1"]
+                )
+
+            self.assertEqual(code, 1)
+            self.assertEqual(stdout, "")
+            self.assertIn("authentication required", json.loads(stderr)["error"])
+            health = read_bookmark_health(Path(tmp))
+            self.assertEqual(health["status"], "failed")
+            self.assertIn("authentication required", health["last_error"])
+
+    def test_bookmark_dry_run_failure_does_not_create_a_vault_or_health_record(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "new-vault"
+            with patch(
+                "nextx.cli.fetch_bookmarks",
+                side_effect=TwitterCLIError("authentication required"),
+            ):
+                code, stdout, stderr = run_cli(
+                    ["sync-bookmarks", "--vault", str(vault), "--limit", "1", "--dry-run"]
+                )
+
+            self.assertEqual(code, 1)
+            self.assertEqual(stdout, "")
+            self.assertIn("authentication required", json.loads(stderr)["error"])
+            self.assertFalse(vault.exists())
+
+    def test_recover_lock_command_reports_an_absent_lock_without_initializing_vault(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "new-vault"
+
+            code, stdout, stderr = run_cli(["recover-lock", "--vault", str(vault)])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["status"], "absent")
+            self.assertFalse(vault.exists())
+
+    def test_next_step_is_read_only_and_describes_setup_then_self_configuration(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            code, stdout, stderr = run_cli(["next-step", "--vault", str(vault)])
+            initial = json.loads(stdout)
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(initial["phase"], "setup_required")
+            self.assertTrue(initial["next_action"]["requires_user_confirmation"])
+            self.assertFalse(vault.exists())
+
+            run_cli(["setup", "--vault", str(vault), "--yes"])
+            code, stdout, _ = run_cli(["next-step", "--vault", str(vault)])
+            configured = json.loads(stdout)
+
+            self.assertEqual(code, 0)
+            self.assertEqual(configured["phase"], "self_required")
+            self.assertEqual(configured["next_action"]["id"], "configure_self")
+
+    def test_configure_self_accepts_agent_json_from_standard_input(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp) / "vault"
+            payload = {
+                "schema_version": 1,
+                "account_key": "primary",
+                "positioning": "A local-first X operator.",
+                "audience": "Solo builders.",
+                "stage": "冷启动",
+                "pillars": ["Agents", "Product", "Writing"],
+                "boundaries": "No unverified claims.",
+                "voice_samples": ["Make the loop smaller, then make it real."],
+            }
+            with patch("nextx.cli.sys.stdin", StringIO(json.dumps(payload))):
+                code, stdout, stderr = run_cli(
+                    ["configure-self", "--vault", str(vault), "--input-json", "-"]
+                )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertTrue(result["ready"])
+            self.assertTrue((vault / "00. Self" / "Profile.md").is_file())
 
 
 if __name__ == "__main__":

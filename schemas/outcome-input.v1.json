@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextx.local/schemas/outcome-input.v1.json",
+  "title": "NextX Outcome Input v1",
+  "type": "object",
+  "required": ["schema_version", "account_key", "window", "views", "likes", "replies", "reposts", "bookmarks"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "account_key": {"const": "primary"},
+    "window": {"enum": ["1h", "24h", "7d"]},
+    "views": {"type": "number", "minimum": 0},
+    "likes": {"type": "number", "minimum": 0},
+    "replies": {"type": "number", "minimum": 0},
+    "reposts": {"type": "number", "minimum": 0},
+    "bookmarks": {"type": "number", "minimum": 0},
+    "quote_signals": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "target_author_replied": {"type": "boolean"},
+        "target_community_replies": {"type": "number", "minimum": 0},
+        "profile_visits": {"type": "number", "minimum": 0},
+        "new_followers": {"type": "number", "minimum": 0}
+      }
+    },
+    "growth_signals": {
+      "type": "object",
+      "required": ["follow_up_completed"],
+      "additionalProperties": false,
+      "properties": {
+        "follow_up_completed": {"type": "boolean"},
+        "target_author_replied": {"type": "boolean"},
+        "non_follower_replies": {"type": "number", "minimum": 0},
+        "target_community_replies": {"type": "number", "minimum": 0},
+        "profile_visits": {"type": "number", "minimum": 0},
+        "new_followers": {"type": "number", "minimum": 0},
+        "cta_actions": {"type": "number", "minimum": 0},
+        "observations": {"type": "array", "maxItems": 5, "items": {"type": "string", "minLength": 1, "maxLength": 600}}
+      }
+    }
+  }
+}

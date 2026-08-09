@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextx.local/schemas/decision-input.v1.json",
+  "title": "NextX Decision Input v1",
+  "type": "object",
+  "required": ["schema_version", "account_key", "verdict", "signal_ids", "reason_code", "reason"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "account_key": {"const": "primary"},
+    "verdict": {"enum": ["do", "defer", "kill"]},
+    "execution_mode": {"enum": ["original", "quote", "reply"]},
+    "signal_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "reason_code": {"type": "string", "minLength": 1},
+    "reason": {"type": "string", "minLength": 1},
+    "angle": {"type": "string", "minLength": 1},
+    "original_value": {"type": "string", "minLength": 1},
+    "risk": {"type": "string", "minLength": 1},
+    "recommended_format": {"type": ["string", "null"]},
+    "risk_level": {"type": ["string", "null"]},
+    "research_summary": {"type": ["string", "null"]},
+    "why_now": {"type": ["string", "null"]},
+    "why_self": {"type": ["string", "null"]},
+    "evidence_sufficient": {"type": "boolean"},
+    "evidence": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["signal_id", "quote", "source_url"], "properties": {"signal_id": {"type": "string", "minLength": 1}, "quote": {"type": "string", "minLength": 1, "maxLength": 1000}, "source_url": {"type": ["string", "null"], "maxLength": 2048}}}},
+    "revisit_at": {"type": "string", "format": "date-time"},
+    "revisit_reason": {"type": "string", "minLength": 1},
+    "quote_angle_type": {"enum": ["extend", "constructive_disagree", "translate", "implementation", "question"]},
+    "relationship_goal": {"enum": ["reader_discovery", "author_dialogue", "credibility"]},
+    "quote_window_ends_at": {"type": "string", "format": "date-time"},
+    "reply_angle_type": {"enum": ["extend", "constructive_disagree", "translate", "implementation", "question"]},
+    "reply_window_ends_at": {"type": "string", "format": "date-time"},
+    "growth_contract": {
+      "type": "object",
+      "required": ["objective", "target_reader", "expected_action", "distribution_target", "review_at"],
+      "additionalProperties": false,
+      "properties": {
+        "objective": {"enum": ["awareness", "authority", "conversion"]},
+        "target_reader": {"type": "string", "minLength": 1, "maxLength": 600},
+        "expected_action": {"type": "string", "minLength": 1, "maxLength": 600},
+        "distribution_target": {"type": "string", "minLength": 1, "maxLength": 600},
+        "review_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "experiment": {"type": "object", "required": ["id", "hypothesis"], "properties": {"id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"}, "hypothesis": {"type": "string", "minLength": 1, "maxLength": 1000}, "metric": {"const": "engagement_rate"}}}
+  },
+  "allOf": [
+    {"if": {"properties": {"verdict": {"const": "do"}}, "required": ["verdict"]}, "then": {"required": ["angle", "original_value", "risk", "evidence_sufficient", "evidence", "growth_contract"], "properties": {"evidence_sufficient": {"const": true}}}},
+    {"if": {"properties": {"verdict": {"const": "defer"}}, "required": ["verdict"]}, "then": {"required": ["revisit_at", "revisit_reason"]}},
+    {"if": {"properties": {"verdict": {"const": "defer"}}, "required": ["verdict"]}, "then": {"not": {"required": ["experiment"]}}},
+    {"if": {"properties": {"verdict": {"const": "kill"}}, "required": ["verdict"]}, "then": {"not": {"required": ["experiment"]}}}
+    ,
+    {"if": {"properties": {"verdict": {"const": "do"}, "execution_mode": {"const": "quote"}}, "required": ["verdict", "execution_mode"]}, "then": {"required": ["recommended_format", "quote_angle_type", "relationship_goal", "quote_window_ends_at"], "properties": {"recommended_format": {"const": "quote-post"}}}},
+    {"if": {"properties": {"verdict": {"const": "do"}, "execution_mode": {"const": "reply"}}, "required": ["verdict", "execution_mode"]}, "then": {"required": ["recommended_format", "reply_angle_type", "relationship_goal", "reply_window_ends_at"], "properties": {"recommended_format": {"const": "reply-post"}}}}
+  ]
+}

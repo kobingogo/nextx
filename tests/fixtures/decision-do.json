@@ -7,10 +7,24 @@
   "reason": "Verified, timely, and aligned with the account.",
   "angle": "Why local agents change X operations",
   "evidence_sufficient": true,
+  "evidence": [
+    {
+      "signal_id": "x:3001",
+      "quote": "A verifiable trend signal.",
+      "source_url": "https://x.com/alpha/status/3001"
+    }
+  ],
   "original_value": "Connect the signal to a local decision loop.",
   "risk": "Metrics may change after capture.",
   "recommended_format": "single-post",
   "research_summary": "A verified X post demonstrates the shift.",
   "why_now": "The discussion is active now.",
-  "why_self": "It matches the account's agent content pillar."
+  "why_self": "It matches the account's agent content pillar.",
+  "growth_contract": {
+    "objective": "authority",
+    "target_reader": "Creators building local-first AI workflows.",
+    "expected_action": "Save the decision-loop method for their next content cycle.",
+    "distribution_target": "Readers already following local-agent operations discussions.",
+    "review_at": "2026-08-14T12:00:00+00:00"
+  }
 }

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextx.local/schemas/analysis-input.v1.json",
+  "title": "NextX Analysis Input v1",
+  "type": "object",
+  "required": ["schema_version", "account_key", "signal_id", "facts", "structure", "hook", "distribution", "transferable", "risks", "recommendation"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "account_key": {"const": "primary"},
+    "signal_id": {"type": "string", "minLength": 1},
+    "facts": {"type": "string", "minLength": 1, "maxLength": 12000},
+    "structure": {"type": "string", "minLength": 1, "maxLength": 12000},
+    "hook": {"type": "string", "minLength": 1, "maxLength": 12000},
+    "distribution": {"type": "string", "minLength": 1, "maxLength": 12000},
+    "transferable": {"type": "string", "minLength": 1, "maxLength": 12000},
+    "risks": {"type": "string", "minLength": 1, "maxLength": 12000},
+    "recommendation": {"type": "string", "minLength": 1, "maxLength": 12000}
+  }
+}
