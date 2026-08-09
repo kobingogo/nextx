@@ -90,6 +90,27 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result["schema_version"], 1)
             self.assertEqual(result["command"], "init")
 
+    def test_cluster_brief_is_a_read_only_agent_command(self):
+        with TemporaryDirectory() as tmp:
+            code, stdout, stderr = run_cli(["cluster-brief", "--vault", tmp])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["command"], "cluster-brief")
+            self.assertEqual(result["signal_count"], 0)
+
+    def test_topic_inbox_exposes_when_no_current_cluster_projection_exists(self):
+        with TemporaryDirectory() as tmp:
+            code, stdout, stderr = run_cli(["topic-inbox", "--vault", tmp])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["command"], "topic-inbox")
+            self.assertEqual(result["status"], "unavailable")
+            self.assertTrue(Path(result["view"]).is_file())
+
     def test_argument_errors_are_structured_json(self):
         code, stdout, stderr = run_cli(["not-a-command"])
 
@@ -592,7 +613,7 @@ class CLITests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(
             {item["name"] for item in result["contracts"]},
-            {"self", "collector", "triage", "analysis", "decision", "artifact", "outcome"},
+            {"self", "collector", "triage", "cluster", "analysis", "decision", "artifact", "outcome"},
         )
         self.assertTrue(all(Path(item["path"]).is_file() for item in result["contracts"]))
 
