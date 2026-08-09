@@ -782,9 +782,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--json", action="store_const", const="json", dest="output")
     try:
         if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(errors="backslashreplace")
+            sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
         if hasattr(sys.stderr, "reconfigure"):
-            sys.stderr.reconfigure(errors="backslashreplace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
         _reexec_with_supported_python()
         arguments = parser.parse_args(argv)
         source = _source_root(arguments.source)

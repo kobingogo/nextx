@@ -51,6 +51,7 @@ class BootstrapTests(unittest.TestCase):
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
@@ -81,16 +82,19 @@ class BootstrapTests(unittest.TestCase):
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)
             self.assertEqual(payload["command"], "bootstrap")
-            self.assertEqual(payload["nextx"], str(bin_dir.resolve() / "nextx"))
+            expected_command = bin_dir.resolve() / ("nextx.cmd" if os.name == "nt" else "nextx")
+            self.assertEqual(payload["nextx"], str(expected_command))
             help_result = subprocess.run(
                 [payload["nextx"], "--help"],
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
             self.assertEqual(help_result.returncode, 0, help_result.stderr)
             self.assertIn("setup", help_result.stdout)
@@ -111,7 +115,8 @@ class BootstrapTests(unittest.TestCase):
             runtime = Path(tmp) / "runtime"
             bin_dir = Path(tmp) / "bin"
             bin_dir.mkdir()
-            (bin_dir / "nextx").write_text("not nextx", encoding="utf-8")
+            existing_command = bin_dir / ("nextx.cmd" if os.name == "nt" else "nextx")
+            existing_command.write_text("not nextx", encoding="utf-8")
             result = subprocess.run(
                 [
                     sys.executable,
@@ -129,10 +134,13 @@ class BootstrapTests(unittest.TestCase):
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(str(runtime / "bin" / "nextx") + " next-step", result.stdout)
-            self.assertNotIn(str(bin_dir / "nextx") + " next-step", result.stdout)
+            runtime_command = runtime / ("Scripts" if os.name == "nt" else "bin") / ("nextx.cmd" if os.name == "nt" else "nextx")
+            bin_command = bin_dir / ("nextx.cmd" if os.name == "nt" else "nextx")
+            self.assertIn(str(runtime_command) + " next-step", result.stdout)
+            self.assertNotIn(str(bin_command) + " next-step", result.stdout)
 
     def test_windows_source_launcher_is_a_cmd_file(self):
         with TemporaryDirectory() as tmp:
@@ -256,6 +264,7 @@ class BootstrapTests(unittest.TestCase):
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             payload = json.loads(result.stdout)

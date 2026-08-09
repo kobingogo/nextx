@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-set "SCRIPT_DIR=%~dp0"
+for %%I in ("%~dp0.") do set "SCRIPT_DIR=%%~fI"
 if not "%NEXTX_PYTHON%"=="" (
   "%NEXTX_PYTHON%" "%SCRIPT_DIR%skills\nextx\scripts\bootstrap.py" --output human %* --source "%SCRIPT_DIR%"
   exit /b %ERRORLEVEL%
