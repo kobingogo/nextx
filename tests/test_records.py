@@ -37,6 +37,27 @@ class RecordTests(unittest.TestCase):
             self.assertEqual(properties["published_url"], "https://x.com/u/status/1")
             self.assertEqual(body, "Body stays.\n")
 
+    def test_update_atomically_adds_and_changes_frontmatter_while_replacing_body(self):
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "record.md"
+            path.write_text(
+                '---\nid: "signal:1"\nstatus: "pending"\ncustom_user_field: "keep"\n---\nOld body.\n',
+                encoding="utf-8",
+            )
+
+            update_frontmatter(
+                path,
+                {"status": "ready", "triage_score": 87},
+                body="New machine block.\n\nManual note.\n",
+            )
+
+            properties, body = read_frontmatter(path)
+            self.assertEqual(properties["id"], "signal:1")
+            self.assertEqual(properties["status"], "ready")
+            self.assertEqual(properties["triage_score"], 87)
+            self.assertEqual(properties["custom_user_field"], "keep")
+            self.assertEqual(body, "New machine block.\n\nManual note.\n")
+
     def test_append_markdown_keeps_existing_text(self):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "record.md"

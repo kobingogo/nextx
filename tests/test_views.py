@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from nextx.signals import add_manual_signal, ingest_signals, signal_filename
+from nextx.signals import add_manual_signal, ingest_signals, signal_path
 from nextx.records import update_frontmatter
 from nextx.decisions import save_decision
 from nextx.vault import atomic_write_text, init_vault
@@ -41,6 +41,90 @@ def collector_payload(count=14):
 
 
 class ViewTests(unittest.TestCase):
+    def test_today_card_prefers_triage_fields_and_formats_named_metrics(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = collector_payload(1)
+            payload["items"][0]["metrics"] = {"views": 10, "likes": 2}
+            ingest_signals(vault, payload, collector="grok-build", now=BASE)
+            update_frontmatter(
+                signal_path(vault, "x:5000"),
+                {
+                    "display_title": "可读的快速判断标题",
+                    "recommended_action": "topic",
+                    "triage_score": 87,
+                    "why_relevant": "与本周增长目标直接相关。",
+                },
+            )
+
+            render_today(vault, now=BASE + timedelta(hours=1))
+            view = (vault / "04. Views" / "Today.md").read_text(encoding="utf-8")
+
+            self.assertIn("|可读的快速判断标题]]", view)
+            self.assertIn("建议：topic", view)
+            self.assertIn("判断分：87", view)
+            self.assertIn("指标：views 10，likes 2", view)
+            self.assertIn("与本周增长目标直接相关。", view)
+            self.assertNotIn("{'views': 10, 'likes': 2}", view)
+
+    def test_today_card_keeps_legacy_untriaged_fallbacks(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
+            path = signal_path(vault, "x:5000")
+            text = path.read_text(encoding="utf-8")
+            text = "\n".join(
+                line for line in text.splitlines() if not line.startswith("display_title:")
+            ) + "\n"
+            path.write_text(text, encoding="utf-8")
+
+            render_today(vault, now=BASE + timedelta(hours=1))
+            view = (vault / "04. Views" / "Today.md").read_text(encoding="utf-8")
+
+            self.assertIn("|x:5000]]", view)
+            self.assertIn("建议：待判断", view)
+            self.assertIn("Self：0/5", view)
+            self.assertIn("近期未裁决", view)
+
+    def test_today_card_compacts_hostile_text_and_keeps_wikilink_closed(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
+            path = signal_path(vault, "x:5000")
+            update_frontmatter(
+                path,
+                {
+                    "display_title": "真实标题]]\n### 伪造标题",
+                    "why_relevant": "正常说明\n### 伪造卡片]]",
+                },
+            )
+
+            render_today(vault, now=BASE + timedelta(hours=1))
+            view = (vault / "04. Views" / "Today.md").read_text(encoding="utf-8")
+
+            self.assertIn(
+                f"### [[{path.stem}|真实标题）） ### 伪造标题]]",
+                view,
+            )
+            self.assertIn("入选：正常说明 ### 伪造卡片））", view)
+            self.assertEqual(view.count("\n### "), 1)
+            self.assertNotIn("真实标题]]\n", view)
+            self.assertNotIn("正常说明\n###", view)
+
+    def test_today_view_links_a_signal_with_hostile_wikilink_controls_safely(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = collector_payload(1)
+            payload["items"][0]["text"] = "Title [[alias]] #heading ^block"
+            ingest_signals(vault, payload, collector="grok-build", now=BASE)
+            path = signal_path(vault, "x:5000")
+
+            render_today(vault, now=BASE + timedelta(hours=1))
+            view = (vault / "04. Views" / "Today.md").read_text(encoding="utf-8")
+
+            self.assertFalse(any(control in path.stem for control in "#^[]"))
+            self.assertIn(f"[[{path.stem}|", view)
+
     def test_today_caps_auto_manual_and_author_and_excludes_decided(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
@@ -54,7 +138,7 @@ class ViewTests(unittest.TestCase):
             init_vault(vault)
             atomic_write_text(
                 vault / "02. Decision" / "decision-existing.md",
-                '---\nid: "decision:existing"\ntype: "decision"\nverdict: "kill"\nsignal_ids: ["x:5013"]\n---\nAlready decided.\n',
+                '---\naccount_key: "primary"\nid: "decision:existing"\ntype: "decision"\nverdict: "kill"\nsignal_ids: ["x:5013"]\n---\nAlready decided.\n',
             )
 
             result = render_today(vault, now=BASE + timedelta(hours=1))
@@ -69,7 +153,7 @@ class ViewTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
-            signal = vault / "01. Signal" / signal_filename("x:5000")
+            signal = signal_path(vault, "x:5000")
             signal.write_text(signal.read_text(encoding="utf-8") + "\nmanual source note\n", encoding="utf-8")
 
             render_today(vault, now=BASE)
@@ -89,7 +173,7 @@ class ViewTests(unittest.TestCase):
             index = vault / ".nextx" / "index.json"
             self.assertTrue(index.exists())
 
-            signal = vault / "01. Signal" / signal_filename("x:5000")
+            signal = signal_path(vault, "x:5000")
             update_frontmatter(signal, {"author_handle": "edited-author"})
             render_today(vault, now=BASE)
             self.assertIn(
@@ -150,7 +234,7 @@ class ViewTests(unittest.TestCase):
             vault = Path(tmp)
             ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
             update_frontmatter(
-                vault / "01. Signal" / signal_filename("x:5000"),
+                signal_path(vault, "x:5000"),
                 {
                     "reply_candidate": True,
                     "reply_window_ends_at": (BASE + timedelta(days=1)).isoformat(),
@@ -166,7 +250,7 @@ class ViewTests(unittest.TestCase):
             vault = Path(tmp)
             ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
             update_frontmatter(
-                vault / "01. Signal" / signal_filename("x:5000"), {"account_key": "other"}
+                signal_path(vault, "x:5000"), {"account_key": "other"}
             )
 
             result = render_today(vault, now=BASE)

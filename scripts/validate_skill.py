@@ -46,9 +46,20 @@ def validate() -> None:
     require("next-step" in text and "configure-self" in text, "Skill must support conversational onboarding")
     for expected in ("growth-loop", "reply-sprint", "reply-brief", "growth_contract", "thread_pack", "1h/24h/7d"):
         require(expected in text, f"Skill is missing Growth Loop behavior: {expected}")
+    triage_route = ("triage-brief", "save-triage", "signal-inbox")
+    for expected in triage_route:
+        require(expected in text, f"Skill is missing Signal triage behavior: {expected}")
+    require(
+        "contracts --name triage" in text,
+        "Skill must look up the exact Quick Triage contract before producing JSON",
+    )
     require("agent_skills" in text and "force-agent-skills" in text, "Skill must handle cross-Agent installation safely")
     require("初始化 NextX" in text, "Skill must expose the one-sentence initialization trigger")
-    require((SKILL / "references" / "contracts.md").is_file(), "Skill contract reference is missing")
+    contract_reference = SKILL / "references" / "contracts.md"
+    require(contract_reference.is_file(), "Skill contract reference is missing")
+    reference_text = contract_reference.read_text(encoding="utf-8")
+    for expected in triage_route:
+        require(expected in reference_text, f"Skill contract reference is missing Signal triage behavior: {expected}")
 
     for relative in ("scripts/install-nextx", "scripts/bootstrap.py", "scripts/install-nextx.cmd"):
         path = SKILL / relative
@@ -74,6 +85,7 @@ def validate() -> None:
     for filename in (
         "self-input.v1.json",
         "collector-envelope.v1.json",
+        "triage-input.v1.json",
         "analysis-input.v1.json",
         "decision-input.v1.json",
         "artifact-input.v1.json",

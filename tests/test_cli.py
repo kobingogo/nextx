@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 import json
 from pathlib import Path
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -11,12 +13,14 @@ from nextx.bookmarks import read_bookmark_health
 from nextx.cli import _load_input, main
 from nextx.records import update_frontmatter
 from nextx.self_model import configure_self
+from nextx.signals import ingest_signals, signal_path
 from nextx.twitter_cli import TwitterCLIError
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "bookmarks.json"
 GROK_FIXTURE = Path(__file__).parent / "fixtures" / "grok-signals.json"
 DECISION_FIXTURE = Path(__file__).parent / "fixtures" / "decision-do.json"
+TRIAGE_FIXTURE = Path(__file__).parent / "fixtures" / "triage-valid.json"
 
 
 def run_cli(arguments):
@@ -28,6 +32,23 @@ def run_cli(arguments):
 
 
 class CLITests(unittest.TestCase):
+    def test_package_and_cli_module_entrypoints_expose_the_same_help(self):
+        results = []
+        for module in ("nextx", "nextx.cli"):
+            result = subprocess.run(
+                [sys.executable, "-m", module, "--help"],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("usage:", result.stdout)
+            self.assertIn("triage-brief", result.stdout)
+            results.append(result.stdout)
+
+        self.assertEqual(results[0], results[1])
+
     def test_version_returns_a_structured_installed_version(self):
         code, stdout, stderr = run_cli(["version"])
 
@@ -125,6 +146,35 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertEqual(result["report"]["created"], 1)
 
+    def test_signal_usability_migration_cli_previews_by_default_and_applies_explicitly(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            self.make_signal_vault(vault)
+            source = signal_path(vault, "x:42")
+            legacy = source.with_name("x-42.md")
+            source.rename(legacy)
+
+            preview_code, preview_stdout, preview_stderr = run_cli(
+                ["migrate-signal-usability", "--vault", tmp]
+            )
+
+            preview = json.loads(preview_stdout)
+            self.assertEqual(preview_code, 0)
+            self.assertEqual(preview_stderr, "")
+            self.assertTrue(preview["dry_run"])
+            self.assertTrue(legacy.exists())
+
+            apply_code, apply_stdout, apply_stderr = run_cli(
+                ["migrate-signal-usability", "--vault", tmp, "--apply"]
+            )
+
+            applied = json.loads(apply_stdout)
+            self.assertEqual(apply_code, 0)
+            self.assertEqual(apply_stderr, "")
+            self.assertFalse(applied["dry_run"])
+            self.assertEqual(len(applied["migrated"]), 1)
+            self.assertFalse(legacy.exists())
+
     def test_today_renders_obisidian_view(self):
         with TemporaryDirectory() as tmp:
             run_cli(
@@ -146,6 +196,36 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertEqual(result["automatic_count"], 2)
             self.assertTrue((Path(tmp) / "04. Views" / "Today.md").exists())
+            self.assertEqual(len(result["signal_inboxes"]["paths"]), 7)
+            self.assertTrue(
+                Path(result["signal_inboxes"]["paths"]["needs_triage"]).exists()
+            )
+
+    def test_signal_inbox_command_only_rebuilds_disposable_views(self):
+        with TemporaryDirectory() as tmp:
+            run_cli(
+                [
+                    "collect",
+                    "--vault",
+                    tmp,
+                    "--source",
+                    "grok",
+                    "--input-json",
+                    str(GROK_FIXTURE),
+                ]
+            )
+            signal = signal_path(Path(tmp), "x:3001")
+            before = signal.read_text(encoding="utf-8")
+
+            code, stdout, stderr = run_cli(["signal-inbox", "--vault", tmp])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertEqual(result["command"], "signal-inbox")
+            self.assertEqual(result["counts"]["needs_triage"], 2)
+            self.assertEqual(len(result["paths"]), 7)
+            self.assertEqual(signal.read_text(encoding="utf-8"), before)
 
     def test_decision_brief_and_save_decision(self):
         with TemporaryDirectory() as tmp:
@@ -416,6 +496,75 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result["checks"]["agents"][0]["status"], "declared")
             self.assertTrue(any("仅由调用方声明" in warning for warning in result["warnings"]))
 
+    def test_triage_brief_returns_one_signal_and_contract(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_signal_vault(Path(tmp))
+            code, stdout, stderr = run_cli(["triage-brief", "x:42", "--vault", str(vault)])
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertEqual(result["signal_id"], "x:42")
+            self.assertTrue(Path(result["contract"]).is_file())
+            self.assertIn("A verifiable Signal for quick triage.", stdout)
+            self.assertNotIn("x:43", stdout)
+            self.assertNotIn("another-signal must not be included", stdout)
+            self.assertEqual(stderr, "")
+
+    def test_save_triage_accepts_json_file_and_prints_computed_fields(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_signal_vault(Path(tmp))
+            payload = Path(tmp) / "triage.json"
+            payload.write_text(json.dumps(self.triage_payload("x:42")), encoding="utf-8")
+            code, stdout, stderr = run_cli(
+                ["save-triage", "--vault", str(vault), "--input-json", str(payload)]
+            )
+
+            result = json.loads(stdout)
+            self.assertEqual(code, 0)
+            self.assertIn("triage_score", result)
+            self.assertNotIn("traceback", stderr.casefold())
+
+    def test_save_triage_accepts_json_from_standard_input(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_signal_vault(Path(tmp))
+            with patch("nextx.cli.sys.stdin", StringIO(json.dumps(self.triage_payload("x:42")))):
+                code, stdout, stderr = run_cli(
+                    ["save-triage", "--vault", str(vault), "--input-json", "-"]
+                )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr, "")
+            self.assertIn("triage_score", json.loads(stdout))
+
+    def test_triage_commands_return_structured_errors_for_invalid_input_missing_signal_and_lock(self):
+        with TemporaryDirectory() as tmp:
+            vault = self.make_signal_vault(Path(tmp))
+            invalid = Path(tmp) / "invalid.json"
+            invalid.write_text("{", encoding="utf-8")
+            invalid_code, invalid_stdout, invalid_stderr = run_cli(
+                ["save-triage", "--vault", str(vault), "--input-json", str(invalid)]
+            )
+            missing_code, missing_stdout, missing_stderr = run_cli(
+                ["triage-brief", "x:missing", "--vault", str(vault)]
+            )
+
+            payload = Path(tmp) / "triage.json"
+            payload.write_text(json.dumps(self.triage_payload("x:42")), encoding="utf-8")
+            run_cli(["save-triage", "--vault", str(vault), "--input-json", str(payload)])
+            update_frontmatter(signal_path(vault, "x:42"), {"triage_locked": True})
+            lock_code, lock_stdout, lock_stderr = run_cli(
+                ["save-triage", "--vault", str(vault), "--input-json", str(payload)]
+            )
+
+            for code, stdout, stderr in (
+                (invalid_code, invalid_stdout, invalid_stderr),
+                (missing_code, missing_stdout, missing_stderr),
+                (lock_code, lock_stdout, lock_stderr),
+            ):
+                self.assertEqual(code, 1)
+                self.assertEqual(stdout, "")
+                self.assertFalse(json.loads(stderr)["ok"])
+
     def test_quote_collection_preflight_accepts_an_authorized_read_only_alternative(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp) / "vault"
@@ -443,7 +592,7 @@ class CLITests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(
             {item["name"] for item in result["contracts"]},
-            {"self", "collector", "analysis", "decision", "artifact", "outcome"},
+            {"self", "collector", "triage", "analysis", "decision", "artifact", "outcome"},
         )
         self.assertTrue(all(Path(item["path"]).is_file() for item in result["contracts"]))
 
@@ -631,6 +780,46 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertTrue(result["ready"])
             self.assertTrue((vault / "00. Self" / "Profile.md").is_file())
+
+    def triage_payload(self, signal_id: str) -> dict[str, object]:
+        payload = json.loads(TRIAGE_FIXTURE.read_text(encoding="utf-8"))
+        payload["signal_id"] = signal_id
+        return payload
+
+    def make_signal_vault(self, vault: Path) -> Path:
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        ingest_signals(
+            vault,
+            {
+                "schema_version": 1,
+                "account_key": "primary",
+                "collector": "grok-build",
+                "retrieved_at": now.isoformat(),
+                "items": [
+                    {
+                        "source_id": "x:42",
+                        "platform": "x",
+                        "source_url": "https://x.com/alpha/status/42",
+                        "author_handle": "alpha",
+                        "published_at": now.isoformat(),
+                        "text": "A verifiable Signal for quick triage.",
+                        "source_confidence": "high",
+                    },
+                    {
+                        "source_id": "x:43",
+                        "platform": "x",
+                        "source_url": "https://x.com/beta/status/43",
+                        "author_handle": "beta",
+                        "published_at": now.isoformat(),
+                        "text": "another-signal must not be included",
+                        "source_confidence": "high",
+                    },
+                ],
+            },
+            collector="grok-build",
+            now=now,
+        )
+        return vault
 
 
 if __name__ == "__main__":

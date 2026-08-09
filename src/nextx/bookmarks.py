@@ -12,7 +12,8 @@ import hashlib
 from typing import Any
 
 from .records import read_frontmatter, update_frontmatter
-from .signals import signal_filename, signal_path
+from .naming import human_signal_filename, signal_display_title
+from .signals import signal_path
 from .vault import (
     atomic_write_json,
     atomic_write_text,
@@ -159,6 +160,7 @@ def _content_fingerprint(text: str) -> str:
 
 
 def render_signal(bookmark: Bookmark, captured_at: datetime) -> str:
+    display_title = signal_display_title(bookmark.text)
     source_url = f"https://x.com/{bookmark.author_handle}/status/{bookmark.id}"
     media_types = [
         str(item.get("type")) for item in bookmark.media if item.get("type")
@@ -191,6 +193,8 @@ def render_signal(bookmark: Bookmark, captured_at: datetime) -> str:
         'why_today: "用户主动收藏，需人工判断其与 Self 的相关性。"',
         f"content_fingerprint: {_yaml(_content_fingerprint(bookmark.text))}",
         'analysis_status: "pending"',
+        f"display_title: {_yaml(display_title)}",
+        'triage_status: "pending"',
         f"media_types: {_yaml(media_types)}",
         f"metrics: {_yaml(bookmark.metrics)}",
         "---",
@@ -217,10 +221,7 @@ def render_signal(bookmark: Bookmark, captured_at: datetime) -> str:
 
 ## 快速判断
 
-- 内容柱：
-- Self 匹配：
-- 值得深拆：
-- 原因：
+尚未判断。
 
 ## 深度拆解
 
@@ -303,7 +304,13 @@ def sync_bookmarks(
                 target = signal_path(vault, signal_id)
                 exists = True
             except FileNotFoundError:
-                target = vault / "01. Signal" / signal_filename(signal_id)
+                target = vault / "01. Signal" / human_signal_filename(
+                    signal_id=signal_id,
+                    platform="x",
+                    author_handle=bookmark.author_handle,
+                    observed_at=bookmark.published_at or timestamp.isoformat(),
+                    display_title=signal_display_title(bookmark.text),
+                )
                 exists = False
             if bookmark.id in known_before and exists:
                 update_frontmatter(
@@ -317,6 +324,10 @@ def sync_bookmarks(
                 )
                 refreshed += 1
                 continue
+            if target.exists():
+                raise ValueError(
+                    f"Signal filename collision at {target}; refusing to overwrite an unrelated record"
+                )
             atomic_write_text(target, render_signal(bookmark, timestamp))
             known_before.add(bookmark.id)
 

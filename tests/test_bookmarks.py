@@ -6,7 +6,7 @@ import unittest
 
 from nextx.bookmarks import read_bookmark_health, sync_bookmarks
 from nextx.records import read_frontmatter
-from nextx.signals import signal_filename
+from nextx.signals import signal_path
 from nextx.vault import read_state
 
 
@@ -25,7 +25,7 @@ class BookmarkSyncTests(unittest.TestCase):
 
             report = sync_bookmarks(vault, fixture_payload(), now=NOW)
 
-            first = vault / "01. Signal" / signal_filename("x:2084556671712477485")
+            first = signal_path(vault, "x:2084556671712477485")
             self.assertEqual(report.created, 2)
             self.assertTrue(first.exists())
             self.assertIn('analysis_status: "pending"', first.read_text(encoding="utf-8"))
@@ -33,6 +33,9 @@ class BookmarkSyncTests(unittest.TestCase):
             self.assertEqual(properties["schema_version"], 1)
             self.assertEqual(properties["account_key"], "primary")
             self.assertEqual(properties["id"], "x:2084556671712477485")
+            self.assertEqual(properties["display_title"], "Example bookmarked post")
+            self.assertEqual(properties["triage_status"], "pending")
+            self.assertIn("__x__", first.name)
             self.assertEqual(
                 read_state(vault)["seen_ids"],
                 ["2084556671712477485", "2084556671712477486"],
@@ -42,7 +45,7 @@ class BookmarkSyncTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             sync_bookmarks(vault, fixture_payload(), now=NOW)
-            first = vault / "01. Signal" / signal_filename("x:2084556671712477485")
+            first = signal_path(vault, "x:2084556671712477485")
             original = first.read_text(encoding="utf-8") + "\nmanual note\n"
             first.write_text(original, encoding="utf-8")
 
@@ -72,9 +75,7 @@ class BookmarkSyncTests(unittest.TestCase):
 
             self.assertTrue(report.dry_run)
             self.assertEqual(report.created, 2)
-            self.assertFalse(
-                (vault / "01. Signal" / signal_filename("x:2084556671712477485")).exists()
-            )
+            self.assertFalse((vault / "01. Signal").exists())
             self.assertIsNone(read_state(vault)["last_success_at"])
 
     def test_explicit_reconciliation_marks_absent_bookmarks_inactive(self):
@@ -92,12 +93,8 @@ class BookmarkSyncTests(unittest.TestCase):
                 snapshot_complete=True,
                 now=NOW.replace(hour=11),
             )
-            retained, _ = read_frontmatter(
-                vault / "01. Signal" / signal_filename("x:2084556671712477485")
-            )
-            removed, _ = read_frontmatter(
-                vault / "01. Signal" / signal_filename("x:2084556671712477486")
-            )
+            retained, _ = read_frontmatter(signal_path(vault, "x:2084556671712477485"))
+            removed, _ = read_frontmatter(signal_path(vault, "x:2084556671712477486"))
 
             self.assertEqual(report.refreshed, 1)
             self.assertEqual(report.deactivated, 1)

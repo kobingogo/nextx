@@ -11,6 +11,8 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .naming import human_signal_filename, safe_filename_component, signal_display_title
+from .record_index import resolve_record_path
 from .records import read_frontmatter, update_frontmatter
 from .vault import atomic_write_json, atomic_write_text, init_vault, vault_lock
 
@@ -309,22 +311,24 @@ def parse_signal_payload(payload: object, collector: str) -> list[Signal]:
 def legacy_signal_filename(signal_id: str) -> str | None:
     """Return the pre-v0.2 filename, when that representation was possible.
 
-    Older Vaults used a lossy slug as the filename.  Keep this helper private to
-    compatibility resolution; new writes must always use :func:`signal_filename`.
+    Older Vaults used a lossy slug as the filename. Keep this helper only for
+    compatibility resolution and the explicit legacy migration command.
     """
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", signal_id).strip("-")
     return f"{safe}.md" if safe else None
 
 
 def signal_filename(signal_id: str) -> str:
-    """Return a stable, collision-resistant filename for a Signal identity.
+    """Return the legacy stable, collision-resistant filename for a Signal identity.
 
     A filename is an index, not the identity itself.  The old ``feed:a`` →
     ``feed-a.md`` transformation silently merged distinct source IDs such as
     ``feed:a`` and ``feed-a``.  Retain a readable prefix while adding the full
     SHA-256 of the original Unicode identifier.  The 160-character prefix keeps
     the resulting filename below common 255-byte filesystem limits for the
-    validated 256-character source IDs.
+    validated 256-character source IDs. New captures use
+    :func:`nextx.naming.human_signal_filename`; this name remains for old Vault
+    compatibility and explicit migration.
     """
     if not isinstance(signal_id, str) or not signal_id:
         raise ValueError("Signal ID must be a non-empty string")
@@ -340,31 +344,25 @@ def signal_path(vault: Path, signal_id: str) -> Path:
     source ID.  This permits a safe, explicit migration later without breaking
     existing Vaults or accidentally reading the wrong record.
     """
-    directory = vault / "01. Signal"
-    canonical = directory / signal_filename(signal_id)
-    candidates = [canonical]
-    legacy = legacy_signal_filename(signal_id)
-    if legacy is not None and legacy != canonical.name:
-        candidates.append(directory / legacy)
-    for candidate in candidates:
-        if not candidate.is_file():
-            continue
-        properties, _ = read_frontmatter(candidate)
-        if properties.get("id") == signal_id:
-            return candidate
-        if candidate == canonical:
-            raise ValueError(
-                f"Signal filename identity mismatch in {candidate}; refusing to use a corrupted record"
-            )
-    raise FileNotFoundError(f"Signal not found: {signal_id}")
+    try:
+        return resolve_record_path(vault, "01. Signal", "signal", signal_id)
+    except FileNotFoundError:
+        old_canonical = vault / "01. Signal" / signal_filename(signal_id)
+        if old_canonical.is_file():
+            properties, _ = read_frontmatter(old_canonical)
+            if properties.get("id") != signal_id:
+                raise ValueError(
+                    f"Signal filename identity mismatch in {old_canonical}; refusing corrupted data"
+                )
+        raise
 
 
 def migrate_signal_filenames(vault: Path, *, dry_run: bool = True) -> dict[str, object]:
     """Explicitly migrate legacy Signal filenames without breaking Obsidian links.
 
-    Legacy names remain supported at read time.  Applying this migration adds
+    Legacy names remain supported at read time. Applying this migration adds
     the old stem as an Obsidian alias before the atomic rename, so existing
-    links keep resolving while new records use collision-resistant names.
+    links keep resolving while historical records use the prior hashed index.
     """
     vault = vault.expanduser().resolve()
     directory = vault / "01. Signal"
@@ -383,6 +381,8 @@ def migrate_signal_filenames(vault: Path, *, dry_run: bool = True) -> dict[str, 
                 or not isinstance(signal_id, str)
                 or not signal_id
             ):
+                continue
+            if path.name != legacy_signal_filename(signal_id):
                 continue
             target = directory / signal_filename(signal_id)
             if path == target:
@@ -437,6 +437,219 @@ def migrate_signal_filenames(vault: Path, *, dry_run: bool = True) -> dict[str, 
     }
 
 
+def _normalized_aliases(value: object, previous_stem: str) -> list[str]:
+    aliases: list[str] = []
+    values = value if isinstance(value, list) else [value] if isinstance(value, str) else []
+    for item in values:
+        if not isinstance(item, str):
+            continue
+        alias = item.strip()
+        if alias and alias not in aliases:
+            aliases.append(alias)
+    if previous_stem not in aliases:
+        aliases.append(previous_stem)
+    return aliases
+
+
+def migrate_signal_usability(
+    vault: Path,
+    *,
+    dry_run: bool = True,
+) -> dict[str, object]:
+    """Preview or apply human filenames for existing primary-account Signals."""
+    vault = vault.expanduser()
+    directory = vault / "01. Signal"
+    candidates: list[tuple[Path, Path, str, bytes]] = []
+    blocked: list[dict[str, str]] = []
+    unchanged: list[dict[str, str]] = []
+    conflicts: list[dict[str, str]] = []
+
+    if directory.is_dir():
+        for source in sorted(directory.glob("*.md")):
+            try:
+                source_bytes = source.read_bytes()
+                properties, _ = read_frontmatter(source)
+            except (OSError, ValueError):
+                continue
+            if (
+                properties.get("type") != "signal"
+                or properties.get("account_key") != "primary"
+            ):
+                continue
+
+            signal_id = properties.get("id")
+            if not isinstance(signal_id, str) or not signal_id.strip():
+                blocked.append(
+                    {"id": "", "source": str(source), "reason": "missing_identity"}
+                )
+                continue
+            display_title = properties.get("display_title")
+            if not isinstance(display_title, str) or not display_title.strip():
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "missing_display_title",
+                    }
+                )
+                continue
+            if not safe_filename_component(display_title, fallback=""):
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "invalid_display_title",
+                    }
+                )
+                continue
+            platform = properties.get("platform")
+            if not isinstance(platform, str) or not platform.strip():
+                blocked.append(
+                    {"id": signal_id, "source": str(source), "reason": "missing_platform"}
+                )
+                continue
+            if not safe_filename_component(platform, fallback=""):
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "invalid_platform",
+                    }
+                )
+                continue
+            observed_at = next(
+                (
+                    value
+                    for key in ("published_at", "retrieved_at", "captured_at")
+                    if isinstance((value := properties.get(key)), str) and value.strip()
+                ),
+                None,
+            )
+            if observed_at is None:
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "missing_observed_at",
+                    }
+                )
+                continue
+            try:
+                validated_observed_at = _timestamp(observed_at, "observed_at")
+            except ValueError:
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "invalid_observed_at",
+                    }
+                )
+                continue
+            assert validated_observed_at is not None
+            try:
+                target = directory / human_signal_filename(
+                    signal_id=signal_id,
+                    platform=platform,
+                    author_handle=(
+                        properties.get("author_handle")
+                        if isinstance(properties.get("author_handle"), str)
+                        else None
+                    ),
+                    observed_at=validated_observed_at,
+                    display_title=display_title,
+                )
+            except (OverflowError, ValueError):
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "invalid_filename_metadata",
+                    }
+                )
+                continue
+            item = {"id": signal_id, "source": str(source), "target": str(target)}
+            if source == target:
+                unchanged.append(item)
+            elif target.exists():
+                conflicts.append(item)
+            else:
+                candidates.append((source, target, signal_id, source_bytes))
+
+    target_counts: dict[Path, int] = {}
+    for _, target, _, _ in candidates:
+        target_counts[target] = target_counts.get(target, 0) + 1
+    if any(count > 1 for count in target_counts.values()):
+        remaining: list[tuple[Path, Path, str, bytes]] = []
+        for source, target, signal_id, source_bytes in candidates:
+            if target_counts[target] > 1:
+                conflicts.append(
+                    {"id": signal_id, "source": str(source), "target": str(target)}
+                )
+            else:
+                remaining.append((source, target, signal_id, source_bytes))
+        candidates = remaining
+
+    planned = [
+        {"id": signal_id, "source": str(source), "target": str(target)}
+        for source, target, signal_id, _ in candidates
+    ]
+
+    def report(*, migrated: list[dict[str, str]], planned_items: list[dict[str, str]]):
+        return {
+            "schema_version": 1,
+            "ok": not conflicts,
+            "command": "migrate-signal-usability",
+            "dry_run": dry_run,
+            "planned": planned_items,
+            "migrated": migrated,
+            "blocked": blocked,
+            "unchanged": unchanged,
+            "conflicts": conflicts,
+        }
+
+    if dry_run or conflicts:
+        return report(migrated=[], planned_items=planned)
+
+    init_vault(vault)
+    migrated: list[dict[str, str]] = []
+    with vault_lock(vault):
+        # Verify the complete plan before changing the first note.
+        for source, target, signal_id, source_bytes in candidates:
+            if not source.is_file() or target.exists():
+                raise RuntimeError(
+                    "Signal files changed during migration; rerun the dry run"
+                )
+            try:
+                current_bytes = source.read_bytes()
+                properties, _ = read_frontmatter(source)
+            except (OSError, ValueError) as error:
+                raise RuntimeError(
+                    "Signal files changed during migration; rerun the dry run"
+                ) from error
+            if current_bytes != source_bytes:
+                raise RuntimeError(
+                    "Signal source changed during migration; rerun the dry run"
+                )
+            if (
+                properties.get("type") != "signal"
+                or properties.get("account_key") != "primary"
+                or properties.get("id") != signal_id
+            ):
+                raise RuntimeError(
+                    "Signal identity changed during migration; rerun the dry run"
+                )
+
+        for source, target, signal_id, _ in candidates:
+            properties, _ = read_frontmatter(source)
+            aliases = _normalized_aliases(properties.get("aliases"), source.stem)
+            update_frontmatter(source, {"aliases": aliases})
+            source.replace(target)
+            migrated.append(
+                {"id": signal_id, "source": str(source), "target": str(target)}
+            )
+    return report(migrated=migrated, planned_items=[])
+
+
 def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -447,6 +660,7 @@ def _content_fingerprint(text: str) -> str:
 
 
 def render_signal(signal: Signal, captured_at: datetime) -> str:
+    display_title = signal_display_title(signal.text)
     signal_type = (
         "quote_candidate"
         if signal.quote_candidate
@@ -479,6 +693,8 @@ def render_signal(signal: Signal, captured_at: datetime) -> str:
         f"reply_window_ends_at: {_json(signal.reply_window_ends_at)}",
         f"content_fingerprint: {_json(_content_fingerprint(signal.text))}",
         'analysis_status: "pending"',
+        f"display_title: {_json(display_title)}",
+        'triage_status: "pending"',
         "---",
     ]
     source = signal.source_url or "无外部 URL"
@@ -509,10 +725,7 @@ def render_signal(signal: Signal, captured_at: datetime) -> str:
 
 ## 快速判断
 
-- 内容柱：
-- Self 匹配：
-- 值得深拆：
-- 原因：
+尚未判断。
 
 ## Quote 机会
 
@@ -576,9 +789,17 @@ def ingest_signals(
                 exists = True
             except FileNotFoundError:
                 exists = False
-            target = vault / "01. Signal" / signal_filename(signal.id)
             if signal.id in written or exists:
                 continue
+            display_title = signal_display_title(signal.text)
+            observed_at = signal.published_at or signal.retrieved_at or timestamp.isoformat()
+            target = vault / "01. Signal" / human_signal_filename(
+                signal_id=signal.id,
+                platform=signal.platform,
+                author_handle=signal.author_handle,
+                observed_at=observed_at,
+                display_title=display_title,
+            )
             if target.exists():
                 raise ValueError(
                     f"Signal filename collision at {target}; refusing to overwrite an unrelated record"

@@ -55,8 +55,8 @@ def update_frontmatter(path: Path, changes: dict[str, object], *, body: str | No
         if key in remaining:
             lines[index] = f"{key}: {_json(remaining.pop(key))}\n"
     additions = [f"{key}: {_json(value)}\n" for key, value in remaining.items()]
-    lines[closing:closing] = additions
-    rendered = "".join(lines[: closing + 1]) + (
+    frontmatter = lines[:closing] + additions + [lines[closing]]
+    rendered = "".join(frontmatter) + (
         body if body is not None else "".join(lines[closing + 1 :])
     )
     atomic_write_text(path, rendered)

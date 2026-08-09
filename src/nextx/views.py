@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-import json
 import math
 from pathlib import Path
 import re
 
 from .records import read_frontmatter
+from .record_index import indexed_records
 from .self_model import growth_strategy, self_readiness
 from .vault import atomic_write_text, init_vault, vault_lock
 
@@ -31,59 +31,7 @@ def _timestamp(properties: dict[str, object]) -> datetime:
 
 
 def _records(folder: Path, record_type: str) -> list[tuple[Path, dict[str, object]]]:
-    records: list[tuple[Path, dict[str, object]]] = []
-    if not folder.exists():
-        return records
-    index_path = folder.parent / ".nextx" / "index.json"
-    try:
-        index = json.loads(index_path.read_text(encoding="utf-8"))
-        if (
-            not isinstance(index, dict)
-            or index.get("schema_version") != 1
-            or not isinstance(index.get("folders"), dict)
-        ):
-            raise ValueError("invalid index")
-    except (OSError, ValueError, json.JSONDecodeError):
-        index = {"schema_version": 1, "folders": {}}
-    folders = index["folders"]
-    cached = folders.get(folder.name, {})
-    cached = cached if isinstance(cached, dict) else {}
-    current: dict[str, object] = {}
-    for path in folder.glob("*.md"):
-        try:
-            stat = path.stat()
-            entry = cached.get(path.name)
-            if (
-                isinstance(entry, dict)
-                and entry.get("mtime_ns") == stat.st_mtime_ns
-                and entry.get("size") == stat.st_size
-                and isinstance(entry.get("properties"), dict)
-            ):
-                properties = entry["properties"]
-            else:
-                properties, _ = read_frontmatter(path)
-            current[path.name] = {
-                "mtime_ns": stat.st_mtime_ns,
-                "size": stat.st_size,
-                "properties": properties,
-            }
-        except (OSError, ValueError):
-            continue
-        # A Vault can contain copied notes from another account.  Legacy notes
-        # without an account key predate the registry and remain readable, but
-        # an explicit non-primary key must never leak into this single-account
-        # workspace's queues or metrics.
-        if properties.get("type") == record_type and properties.get("account_key", "primary") == "primary":
-            records.append((path, properties))
-    if current != cached:
-        folders[folder.name] = current
-        index_path.parent.mkdir(parents=True, exist_ok=True)
-        with vault_lock(folder.parent):
-            atomic_write_text(
-                index_path,
-                json.dumps(index, ensure_ascii=False, separators=(",", ":")) + "\n",
-            )
-    return records
+    return indexed_records(folder.parent, folder.name, record_type)
 
 
 def _parse_time(value: object) -> datetime | None:
@@ -129,19 +77,39 @@ def _signal_queue_state(
     return excluded, revisit_due, completed_count
 
 
+def _safe_card_text(value: object, fallback: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return fallback
+    return " ".join(value.split()).replace("|", "／").replace("]", "）")
+
+
 def _card(path: Path, properties: dict[str, object], reason: str) -> str:
-    signal_id = str(properties.get("id", path.stem))
+    title = _safe_card_text(
+        properties.get("display_title") or properties.get("id") or path.stem,
+        path.stem,
+    )
+    action = properties.get("recommended_action") or "待判断"
+    triage = properties.get("triage_score")
+    why = _safe_card_text(properties.get("why_relevant") or reason, "待补充")
     author = properties.get("author_handle")
     author_text = f"@{author}" if author else "手动输入"
     source = properties.get("source_url") or "本地内容"
-    metrics = properties.get("metrics") or {}
-    return f"""### [[{path.stem}|{signal_id}]]
+    metrics = properties.get("metrics")
+    metric_values = metrics if isinstance(metrics, dict) else {}
+    metric_text = "，".join(
+        f"{name} {value}" for name, value in metric_values.items()
+    ) or "暂无"
+    self_fit = _bounded_score(properties, "self_fit")
+    return f"""### [[{path.stem}|{title}]]
 
 - 作者：{author_text}
 - 来源：{source}
 - 时间：{properties.get('published_at') or properties.get('captured_at') or '未知'}
-- 指标：`{metrics}`
-- 入选：{reason}
+- 指标：{metric_text}
+- 建议：{action}
+- 判断分：{triage if isinstance(triage, int) and not isinstance(triage, bool) else '待计算'}
+- Self：{self_fit}/5
+- 入选：{why}
 """
 
 

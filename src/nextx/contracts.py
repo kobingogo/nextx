@@ -10,6 +10,7 @@ CONTRACT_FILES = {
     "self": "self-input.v1.json",
     "collector": "collector-envelope.v1.json",
     "analysis": "analysis-input.v1.json",
+    "triage": "triage-input.v1.json",
     "decision": "decision-input.v1.json",
     "artifact": "artifact-input.v1.json",
     "outcome": "outcome-input.v1.json",

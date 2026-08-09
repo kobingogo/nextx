@@ -7,7 +7,7 @@ import unittest
 from nextx.decisions import decision_brief, save_decision
 from nextx.bookmarks import sync_bookmarks
 from nextx.records import read_frontmatter, update_frontmatter
-from nextx.signals import ingest_signals, signal_filename
+from nextx.signals import ingest_signals, signal_path
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "grok-signals.json"
@@ -183,7 +183,7 @@ class DecisionTests(unittest.TestCase):
                 save_decision(vault, invented, now=NOW)
 
             update_frontmatter(
-                vault / "01. Signal" / signal_filename("x:3002"), {"source_confidence": "low"}
+                signal_path(vault, "x:3002"), {"source_confidence": "low"}
             )
             low_only = decision_payload()
             low_only["signal_ids"] = ["x:3002"]

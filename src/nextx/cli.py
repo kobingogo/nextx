@@ -34,7 +34,14 @@ from .decisions import decision_brief, save_decision
 from .learning import record_outcome, render_weekly_review
 from .preflight import INTENT_REQUIREMENTS, run_preflight
 from .self_model import configure_self, ensure_self_templates, growth_strategy, self_readiness
-from .signals import add_manual_signal, ingest_signals, migrate_signal_filenames
+from .signal_views import render_signal_inboxes
+from .signals import (
+    add_manual_signal,
+    ingest_signals,
+    migrate_signal_filenames,
+    migrate_signal_usability,
+)
+from .triage import build_triage_brief, save_triage
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
 from .vault import atomic_write_text, init_vault, read_state, recover_vault_lock, vault_lock
 from .views import (
@@ -149,6 +156,11 @@ def _parser() -> argparse.ArgumentParser:
     today = subparsers.add_parser("today", help="Rebuild the daily decision View")
     _add_vault_argument(today)
 
+    signal_inbox = subparsers.add_parser(
+        "signal-inbox", help="Rebuild the classified Signal inbox Views"
+    )
+    _add_vault_argument(signal_inbox)
+
     quote_sprint = subparsers.add_parser(
         "quote-sprint", help="Rebuild the time-bounded launch-stage Quote queue"
     )
@@ -208,6 +220,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     _add_vault_argument(analysis)
     analysis.add_argument("signal_id")
+
+    triage_brief = subparsers.add_parser(
+        "triage-brief", help="Build bounded context for one Signal quick triage"
+    )
+    _add_vault_argument(triage_brief)
+    triage_brief.add_argument("signal_id")
+
+    save_triage_parser = subparsers.add_parser(
+        "save-triage", help="Validate and save one Signal quick triage"
+    )
+    _add_vault_argument(save_triage_parser)
+    save_triage_parser.add_argument("--input-json", required=True, type=Path)
 
     save_analysis_parser = subparsers.add_parser(
         "save-analysis", help="Validate and persist a deep Signal analysis"
@@ -282,6 +306,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Apply the migration after reviewing the default dry-run output",
     )
+    usability = subparsers.add_parser(
+        "migrate-signal-usability",
+        help="Preview or apply human-readable filenames for triaged Signals",
+    )
+    _add_vault_argument(usability)
+    usability.add_argument("--apply", action="store_true")
     return parser
 
 
@@ -592,10 +622,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = _manual_signal_command(arguments)
             code = 0
         elif arguments.command == "today":
-            result = render_today(resolve_vault(arguments.vault))
-            result["quote_sprint"] = render_quote_sprint(resolve_vault(arguments.vault))
-            result["reply_sprint"] = render_reply_sprint(resolve_vault(arguments.vault))
-            result["growth_loop"] = render_growth_loop(resolve_vault(arguments.vault))
+            vault = resolve_vault(arguments.vault)
+            result = render_today(vault)
+            result["signal_inboxes"] = render_signal_inboxes(vault)
+            result["quote_sprint"] = render_quote_sprint(vault)
+            result["reply_sprint"] = render_reply_sprint(vault)
+            result["growth_loop"] = render_growth_loop(vault)
+            code = 0
+        elif arguments.command == "signal-inbox":
+            result = render_signal_inboxes(resolve_vault(arguments.vault))
             code = 0
         elif arguments.command == "quote-sprint":
             result = render_quote_sprint(resolve_vault(arguments.vault))
@@ -650,6 +685,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 vault, "analysis", arguments.signal_id, build_analysis_brief(vault, arguments.signal_id)
             )
             code = 0
+        elif arguments.command == "triage-brief":
+            result = build_triage_brief(resolve_vault(arguments.vault), arguments.signal_id)
+            code = 0
+        elif arguments.command == "save-triage":
+            result = save_triage(
+                resolve_vault(arguments.vault), _load_input(arguments.input_json)
+            )
+            code = 0
         elif arguments.command == "save-analysis":
             result = save_analysis(
                 resolve_vault(arguments.vault), _load_input(arguments.input_json)
@@ -700,6 +743,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 resolve_vault(arguments.vault), dry_run=not arguments.apply
             )
             code = 0
+        elif arguments.command == "migrate-signal-usability":
+            result = migrate_signal_usability(
+                resolve_vault(arguments.vault), dry_run=not arguments.apply
+            )
+            code = 0
         else:
             result = recover_vault_lock(resolve_vault(arguments.vault), force=arguments.force)
             code = 0
@@ -708,3 +756,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, RuntimeError, ValueError, TwitterCLIError) as error:
         _print_json({"ok": False, "error": str(error)}, stream=sys.stderr)
         return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

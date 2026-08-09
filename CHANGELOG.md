@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added stable Signal identity lookup, human-readable collision-safe filenames, and a preview-first `migrate-signal-usability` flow.
+- Added the versioned Quick Triage contract, bounded `triage-brief`, validated `save-triage`, deterministic scoring and strategy snapshots.
+- Added rebuildable Signal Inbox Views for Immediate Action, four content lanes, Needs Triage and Archived records, plus the Agent and operator authority boundaries for using them.
+- Made `python -m nextx.cli` execute the same CLI as the existing `python -m nextx` package entry point.
+
 ## v0.3.0-alpha.2
 
 - Fixed isolated installation and CI builds by declaring `setuptools`/`wheel` build requirements and enabling build isolation; bundled schemas and prompts are now present in wheel installs.
