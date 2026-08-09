@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 import json
 from pathlib import Path
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -30,6 +32,23 @@ def run_cli(arguments):
 
 
 class CLITests(unittest.TestCase):
+    def test_package_and_cli_module_entrypoints_expose_the_same_help(self):
+        results = []
+        for module in ("nextx", "nextx.cli"):
+            result = subprocess.run(
+                [sys.executable, "-m", module, "--help"],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("usage:", result.stdout)
+            self.assertIn("triage-brief", result.stdout)
+            results.append(result.stdout)
+
+        self.assertEqual(results[0], results[1])
+
     def test_version_returns_a_structured_installed_version(self):
         code, stdout, stderr = run_cli(["version"])
 

@@ -756,3 +756,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (OSError, RuntimeError, ValueError, TwitterCLIError) as error:
         _print_json({"ok": False, "error": str(error)}, stream=sys.stderr)
         return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
