@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -32,6 +33,69 @@ class TopicCardTests(unittest.TestCase):
             self.assertNotIn(unrelated, brief["brief"])
             self.assertIn("Profile.md", brief["brief"])
             self.assertIn("不要写推文正文", brief["brief"])
+
+    def test_topic_brief_keeps_raw_quotes_inside_untrusted_data_only(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            cluster_id = self._cluster(vault)
+
+            brief = build_topic_brief(vault, cluster_id)["brief"]
+            quote_at = brief.index("First raw source")
+
+            self.assertEqual(brief.count("First raw source"), 1)
+            prefix = brief[:quote_at]
+            self.assertGreater(prefix.count("<nextx-untrusted-data"), prefix.count("</nextx-untrusted-data>"))
+
+    def test_topic_brief_treats_cluster_metadata_as_untrusted_too(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            cluster_id = self._cluster(vault)
+            snapshot_path = vault / ".nextx" / "clusters.json"
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            snapshot["clusters"][0]["display_title"] = "First raw source"
+            snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
+
+            brief = build_topic_brief(vault, cluster_id)["brief"]
+            positions = [index for index in range(len(brief)) if brief.startswith("First raw source", index)]
+
+            self.assertGreaterEqual(len(positions), 2)
+            for quote_at in positions:
+                prefix = brief[:quote_at]
+                self.assertGreater(prefix.count("<nextx-untrusted-data"), prefix.count("</nextx-untrusted-data>"))
+
+    def test_tampered_run_matching_cluster_cannot_be_promoted(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            cluster_id = self._cluster(vault)
+            snapshot_path = vault / ".nextx" / "clusters.json"
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            forged_members = ["x:101", "x:103"]
+            snapshot["clusters"][0]["signal_ids"] = forged_members
+            snapshot["clusters"][0]["cluster_id"] = "cluster:" + hashlib.sha256(
+                "\n".join([snapshot["cluster_run_id"], *sorted(forged_members)]).encode("utf-8")
+            ).hexdigest()[:16]
+            snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
+            forged_id = snapshot["clusters"][0]["cluster_id"]
+
+            with self.assertRaisesRegex(ValueError, "current"):
+                build_topic_brief(vault, forged_id)
+            with self.assertRaisesRegex(ValueError, "current"):
+                save_topic(vault, self._payload(forged_id), now=NOW)
+
+    def test_failed_current_cluster_run_cannot_build_or_save_a_topic(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            cluster_id = self._cluster(vault)
+            snapshot = json.loads((vault / ".nextx" / "clusters.json").read_text(encoding="utf-8"))
+            (vault / ".nextx" / "cluster-status.json").write_text(
+                json.dumps({"status": "failed", "cluster_run_id": snapshot["cluster_run_id"]}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "failed"):
+                build_topic_brief(vault, cluster_id)
+            with self.assertRaisesRegex(ValueError, "failed"):
+                save_topic(vault, self._payload(cluster_id), now=NOW)
 
     def test_save_topic_is_explicit_and_cluster_rebuild_cannot_overwrite_it(self):
         with TemporaryDirectory() as tmp:
