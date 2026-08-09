@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -10,6 +11,7 @@ from nextx.signals import (
     ingest_signals,
     legacy_signal_filename,
     migrate_signal_filenames,
+    migrate_signal_usability,
     signal_filename,
     signal_path,
 )
@@ -25,6 +27,36 @@ def fixture_payload():
 
 
 class SignalTests(unittest.TestCase):
+    def write_legacy_signal(
+        self,
+        vault: Path,
+        signal_id: str,
+        *,
+        display_title: str | None = "Agent workflow evidence",
+        account_key: str = "primary",
+        aliases: object | None = None,
+    ) -> Path:
+        directory = vault / "01. Signal"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / str(legacy_signal_filename(signal_id))
+        properties = [
+            "---",
+            'schema_version: 1',
+            f"account_key: {json.dumps(account_key)}",
+            f"id: {json.dumps(signal_id)}",
+            'type: "signal"',
+            'platform: "x"',
+            'author_handle: "alpha"',
+            'published_at: "2026-08-07T10:00:00+00:00"',
+        ]
+        if display_title is not None:
+            properties.append(f"display_title: {json.dumps(display_title)}")
+        if aliases is not None:
+            properties.append(f"aliases: {json.dumps(aliases)}")
+        properties.extend(["---", "", f"# Signal · {signal_id}", ""])
+        path.write_text("\n".join(properties), encoding="utf-8")
+        return path
+
     def test_grok_import_normalizes_versioned_signals(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
@@ -154,6 +186,130 @@ class SignalTests(unittest.TestCase):
             self.assertFalse(legacy.exists())
             properties, _ = read_frontmatter(canonical)
             self.assertIn("x-3001", properties["aliases"])
+
+    def test_usability_migration_blocks_records_without_display_title(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            path = self.write_legacy_signal(vault, "x:42", display_title=None)
+
+            result = migrate_signal_usability(vault)
+
+            self.assertEqual(result["planned"], [])
+            self.assertEqual(result["blocked"][0]["reason"], "missing_display_title")
+            self.assertTrue(path.exists())
+
+    def test_usability_migration_previews_then_renames_with_an_alias(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            old = self.write_legacy_signal(
+                vault, "x:42", display_title="Agent workflow evidence"
+            )
+
+            preview = migrate_signal_usability(vault)
+
+            self.assertTrue(old.exists())
+            self.assertIn("Agent-workflow-evidence", preview["planned"][0]["target"])
+
+            applied = migrate_signal_usability(vault, dry_run=False)
+
+            new = Path(applied["migrated"][0]["target"])
+            properties, _ = read_frontmatter(new)
+            self.assertFalse(old.exists())
+            self.assertIn(old.stem, properties["aliases"])
+            self.assertEqual(signal_path(vault, "x:42"), new)
+
+    def test_usability_migration_ignores_other_accounts_and_reports_human_path_unchanged(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            other = self.write_legacy_signal(vault, "x:41", account_key="other")
+            source = self.write_legacy_signal(vault, "x:42")
+            target = Path(migrate_signal_usability(vault)["planned"][0]["target"])
+            source.rename(target)
+
+            result = migrate_signal_usability(vault)
+
+            self.assertEqual(result["planned"], [])
+            self.assertEqual(result["blocked"], [])
+            self.assertEqual(result["conflicts"], [])
+            self.assertEqual(result["unchanged"][0]["id"], "x:42")
+            self.assertTrue(other.exists())
+
+    def test_usability_migration_reports_existing_target_as_a_conflict(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            source = self.write_legacy_signal(vault, "x:42")
+            target = Path(migrate_signal_usability(vault)["planned"][0]["target"])
+            target.write_text("occupied", encoding="utf-8")
+
+            result = migrate_signal_usability(vault)
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["planned"], [])
+            self.assertEqual(result["conflicts"][0]["source"], str(source))
+            self.assertEqual(result["conflicts"][0]["target"], str(target))
+
+    def test_usability_migration_apply_with_any_conflict_renames_nothing(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            movable = self.write_legacy_signal(vault, "x:41", display_title="Movable")
+            conflicted = self.write_legacy_signal(vault, "x:42", display_title="Occupied")
+            preview = migrate_signal_usability(vault)
+            target = Path(
+                next(item["target"] for item in preview["planned"] if item["id"] == "x:42")
+            )
+            target.write_text("occupied", encoding="utf-8")
+
+            result = migrate_signal_usability(vault, dry_run=False)
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["migrated"], [])
+            self.assertTrue(movable.exists())
+            self.assertTrue(conflicted.exists())
+
+    def test_usability_migration_rechecks_every_source_before_first_mutation(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            first = self.write_legacy_signal(vault, "x:41", display_title="First")
+            changed = self.write_legacy_signal(vault, "x:42", display_title="Second")
+            before_first = first.read_bytes()
+
+            @contextmanager
+            def change_source_before_lock_checks(_vault):
+                changed.write_text(
+                    changed.read_text(encoding="utf-8") + "changed after preview\n",
+                    encoding="utf-8",
+                )
+                yield
+
+            with unittest.mock.patch(
+                "nextx.signals.vault_lock", change_source_before_lock_checks
+            ):
+                with self.assertRaisesRegex(RuntimeError, "changed during migration"):
+                    migrate_signal_usability(vault, dry_run=False)
+
+            self.assertEqual(first.read_bytes(), before_first)
+            self.assertTrue(first.exists())
+            self.assertTrue(changed.exists())
+
+    def test_usability_migration_dry_run_preserves_bytes_and_normalizes_safe_aliases_on_apply(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            source = self.write_legacy_signal(
+                vault,
+                "x:42",
+                aliases=[" kept ", "", 7, "kept", "another"],
+            )
+            before = source.read_bytes()
+
+            preview = migrate_signal_usability(vault)
+
+            self.assertTrue(preview["dry_run"])
+            self.assertEqual(source.read_bytes(), before)
+            self.assertEqual({path.name for path in source.parent.iterdir()}, {source.name})
+
+            applied = migrate_signal_usability(vault, dry_run=False)
+            properties, _ = read_frontmatter(Path(applied["migrated"][0]["target"]))
+            self.assertEqual(properties["aliases"], ["kept", "another", source.stem])
 
     def test_manual_signal_uses_stable_content_hash(self):
         with TemporaryDirectory() as tmp:

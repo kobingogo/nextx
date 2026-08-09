@@ -437,6 +437,189 @@ def migrate_signal_filenames(vault: Path, *, dry_run: bool = True) -> dict[str, 
     }
 
 
+def _normalized_aliases(value: object, previous_stem: str) -> list[str]:
+    aliases: list[str] = []
+    if isinstance(value, list):
+        for item in value:
+            if not isinstance(item, str):
+                continue
+            alias = item.strip()
+            if alias and alias not in aliases:
+                aliases.append(alias)
+    if previous_stem not in aliases:
+        aliases.append(previous_stem)
+    return aliases
+
+
+def migrate_signal_usability(
+    vault: Path,
+    *,
+    dry_run: bool = True,
+) -> dict[str, object]:
+    """Preview or apply human filenames for existing primary-account Signals."""
+    vault = vault.expanduser()
+    directory = vault / "01. Signal"
+    candidates: list[tuple[Path, Path, str, bytes]] = []
+    blocked: list[dict[str, str]] = []
+    unchanged: list[dict[str, str]] = []
+    conflicts: list[dict[str, str]] = []
+
+    if directory.is_dir():
+        for source in sorted(directory.glob("*.md")):
+            try:
+                source_bytes = source.read_bytes()
+                properties, _ = read_frontmatter(source)
+            except (OSError, ValueError):
+                continue
+            if (
+                properties.get("type") != "signal"
+                or properties.get("account_key") != "primary"
+            ):
+                continue
+
+            signal_id = properties.get("id")
+            if not isinstance(signal_id, str) or not signal_id.strip():
+                blocked.append(
+                    {"id": "", "source": str(source), "reason": "missing_identity"}
+                )
+                continue
+            display_title = properties.get("display_title")
+            if not isinstance(display_title, str) or not display_title.strip():
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "missing_display_title",
+                    }
+                )
+                continue
+            platform = properties.get("platform")
+            if not isinstance(platform, str) or not platform.strip():
+                blocked.append(
+                    {"id": signal_id, "source": str(source), "reason": "missing_platform"}
+                )
+                continue
+            observed_at = next(
+                (
+                    value
+                    for key in ("published_at", "retrieved_at", "captured_at")
+                    if isinstance((value := properties.get(key)), str) and value.strip()
+                ),
+                None,
+            )
+            if observed_at is None:
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "missing_observed_at",
+                    }
+                )
+                continue
+            try:
+                target = directory / human_signal_filename(
+                    signal_id=signal_id,
+                    platform=platform,
+                    author_handle=(
+                        properties.get("author_handle")
+                        if isinstance(properties.get("author_handle"), str)
+                        else None
+                    ),
+                    observed_at=observed_at,
+                    display_title=display_title,
+                )
+            except (OverflowError, ValueError):
+                blocked.append(
+                    {
+                        "id": signal_id,
+                        "source": str(source),
+                        "reason": "invalid_observed_at",
+                    }
+                )
+                continue
+            item = {"id": signal_id, "source": str(source), "target": str(target)}
+            if source == target:
+                unchanged.append(item)
+            elif target.exists():
+                conflicts.append(item)
+            else:
+                candidates.append((source, target, signal_id, source_bytes))
+
+    target_counts: dict[Path, int] = {}
+    for _, target, _, _ in candidates:
+        target_counts[target] = target_counts.get(target, 0) + 1
+    if any(count > 1 for count in target_counts.values()):
+        remaining: list[tuple[Path, Path, str, bytes]] = []
+        for source, target, signal_id, source_bytes in candidates:
+            if target_counts[target] > 1:
+                conflicts.append(
+                    {"id": signal_id, "source": str(source), "target": str(target)}
+                )
+            else:
+                remaining.append((source, target, signal_id, source_bytes))
+        candidates = remaining
+
+    planned = [
+        {"id": signal_id, "source": str(source), "target": str(target)}
+        for source, target, signal_id, _ in candidates
+    ]
+
+    def report(*, migrated: list[dict[str, str]], planned_items: list[dict[str, str]]):
+        return {
+            "schema_version": 1,
+            "ok": not conflicts,
+            "command": "migrate-signal-usability",
+            "dry_run": dry_run,
+            "planned": planned_items,
+            "migrated": migrated,
+            "blocked": blocked,
+            "unchanged": unchanged,
+            "conflicts": conflicts,
+        }
+
+    if dry_run or conflicts:
+        return report(migrated=[], planned_items=planned)
+
+    init_vault(vault)
+    migrated: list[dict[str, str]] = []
+    with vault_lock(vault):
+        # Verify the complete plan before changing the first note.
+        for source, target, signal_id, source_bytes in candidates:
+            if not source.is_file() or target.exists():
+                raise RuntimeError(
+                    "Signal files changed during migration; rerun the dry run"
+                )
+            try:
+                current_bytes = source.read_bytes()
+                properties, _ = read_frontmatter(source)
+            except (OSError, ValueError) as error:
+                raise RuntimeError(
+                    "Signal files changed during migration; rerun the dry run"
+                ) from error
+            if current_bytes != source_bytes:
+                raise RuntimeError(
+                    "Signal source changed during migration; rerun the dry run"
+                )
+            if (
+                properties.get("type") != "signal"
+                or properties.get("account_key") != "primary"
+                or properties.get("id") != signal_id
+            ):
+                raise RuntimeError(
+                    "Signal identity changed during migration; rerun the dry run"
+                )
+
+        for source, target, signal_id, _ in candidates:
+            properties, _ = read_frontmatter(source)
+            aliases = _normalized_aliases(properties.get("aliases"), source.stem)
+            update_frontmatter(source, {"aliases": aliases})
+            source.replace(target)
+            migrated.append(
+                {"id": signal_id, "source": str(source), "target": str(target)}
+            )
+    return report(migrated=migrated, planned_items=[])
+
+
 def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 

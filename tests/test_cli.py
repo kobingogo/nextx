@@ -127,6 +127,35 @@ class CLITests(unittest.TestCase):
             self.assertEqual(stderr, "")
             self.assertEqual(result["report"]["created"], 1)
 
+    def test_signal_usability_migration_cli_previews_by_default_and_applies_explicitly(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            self.make_signal_vault(vault)
+            source = signal_path(vault, "x:42")
+            legacy = source.with_name("x-42.md")
+            source.rename(legacy)
+
+            preview_code, preview_stdout, preview_stderr = run_cli(
+                ["migrate-signal-usability", "--vault", tmp]
+            )
+
+            preview = json.loads(preview_stdout)
+            self.assertEqual(preview_code, 0)
+            self.assertEqual(preview_stderr, "")
+            self.assertTrue(preview["dry_run"])
+            self.assertTrue(legacy.exists())
+
+            apply_code, apply_stdout, apply_stderr = run_cli(
+                ["migrate-signal-usability", "--vault", tmp, "--apply"]
+            )
+
+            applied = json.loads(apply_stdout)
+            self.assertEqual(apply_code, 0)
+            self.assertEqual(apply_stderr, "")
+            self.assertFalse(applied["dry_run"])
+            self.assertEqual(len(applied["migrated"]), 1)
+            self.assertFalse(legacy.exists())
+
     def test_today_renders_obisidian_view(self):
         with TemporaryDirectory() as tmp:
             run_cli(

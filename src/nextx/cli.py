@@ -35,7 +35,12 @@ from .learning import record_outcome, render_weekly_review
 from .preflight import INTENT_REQUIREMENTS, run_preflight
 from .self_model import configure_self, ensure_self_templates, growth_strategy, self_readiness
 from .signal_views import render_signal_inboxes
-from .signals import add_manual_signal, ingest_signals, migrate_signal_filenames
+from .signals import (
+    add_manual_signal,
+    ingest_signals,
+    migrate_signal_filenames,
+    migrate_signal_usability,
+)
 from .triage import build_triage_brief, save_triage
 from .twitter_cli import TwitterCLIError, fetch_bookmarks
 from .vault import atomic_write_text, init_vault, read_state, recover_vault_lock, vault_lock
@@ -301,6 +306,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Apply the migration after reviewing the default dry-run output",
     )
+    usability = subparsers.add_parser(
+        "migrate-signal-usability",
+        help="Preview or apply human-readable filenames for triaged Signals",
+    )
+    _add_vault_argument(usability)
+    usability.add_argument("--apply", action="store_true")
     return parser
 
 
@@ -729,6 +740,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             code = 0
         elif arguments.command == "migrate-signals":
             result = migrate_signal_filenames(
+                resolve_vault(arguments.vault), dry_run=not arguments.apply
+            )
+            code = 0
+        elif arguments.command == "migrate-signal-usability":
+            result = migrate_signal_usability(
                 resolve_vault(arguments.vault), dry_run=not arguments.apply
             )
             code = 0
