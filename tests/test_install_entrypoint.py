@@ -49,7 +49,8 @@ class InstallEntrypointTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("NextX installer", result.stdout)
             self.assertIn("初始化 NextX", result.stdout)
-            self.assertIn("nextx next-step", result.stdout)
+            command_name = "nextx.cmd next-step" if os.name == "nt" else "nextx next-step"
+            self.assertIn(command_name, result.stdout)
             self.assertNotIn('"schema_version"', result.stdout)
 
     def test_root_command_accepts_json_after_other_options_and_locks_source(self):
