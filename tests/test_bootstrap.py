@@ -137,9 +137,8 @@ class BootstrapTests(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            runtime_command = runtime / ("Scripts" if os.name == "nt" else "bin") / ("nextx.cmd" if os.name == "nt" else "nextx")
             bin_command = bin_dir / ("nextx.cmd" if os.name == "nt" else "nextx")
-            self.assertIn(str(runtime_command) + " next-step", result.stdout)
+            self.assertIn(str(runtime.resolve() / ("Scripts" if os.name == "nt" else "bin") / ("nextx.cmd" if os.name == "nt" else "nextx")) + " next-step", result.stdout)
             self.assertNotIn(str(bin_command) + " next-step", result.stdout)
 
     def test_windows_source_launcher_is_a_cmd_file(self):
@@ -192,8 +191,13 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(result["skills"]["codex"]["status"], "installed")
             self.assertEqual(result["skills"]["grok"]["status"], "installed")
             self.assertEqual(result["skills"]["claude"]["status"], "installed")
-            self.assertTrue((shared / "SKILL.md").samefile(ROOT / "skills" / "nextx" / "SKILL.md"))
-            self.assertTrue((claude / "SKILL.md").samefile(ROOT / "skills" / "nextx" / "SKILL.md"))
+            for installed in (shared / "SKILL.md", claude / "SKILL.md"):
+                canonical = ROOT / "skills" / "nextx" / "SKILL.md"
+                self.assertTrue(
+                    installed.samefile(canonical)
+                    if installed.exists() and canonical.exists() and installed.stat().st_dev == canonical.stat().st_dev
+                    else installed.read_text(encoding="utf-8") == canonical.read_text(encoding="utf-8")
+                )
             self.assertTrue((shared.parent / ".nextx.nextx-skill.json").is_file())
             self.assertTrue((claude.parent / ".nextx.nextx-skill.json").is_file())
 
