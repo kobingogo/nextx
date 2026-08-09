@@ -32,11 +32,16 @@ class SignalTests(unittest.TestCase):
             report = ingest_signals(vault, fixture_payload(), collector="grok-build", now=NOW)
 
             self.assertEqual(report.created, 2)
-            first, _ = read_frontmatter(vault / "01. Signal" / signal_filename("x:3001"))
-            second, _ = read_frontmatter(vault / "01. Signal" / signal_filename("x:3002"))
+            first_path = signal_path(vault, "x:3001")
+            first, body = read_frontmatter(first_path)
+            second, _ = read_frontmatter(signal_path(vault, "x:3002"))
             self.assertEqual(first["schema_version"], 1)
             self.assertEqual(first["account_key"], "primary")
             self.assertEqual(first["collector"], "grok-build")
+            self.assertEqual(first["display_title"], "A verifiable trend signal.")
+            self.assertEqual(first["triage_status"], "pending")
+            self.assertIn("尚未判断。", body)
+            self.assertIn("__x__", first_path.name)
             self.assertEqual(second["id"], "x:3002")
 
     def test_second_import_is_fully_deduplicated(self):
@@ -89,7 +94,7 @@ class SignalTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             ingest_signals(vault, fixture_payload(), collector="grok-build", now=NOW)
-            canonical = vault / "01. Signal" / signal_filename("x:3001")
+            canonical = signal_path(vault, "x:3001")
             legacy_name = legacy_signal_filename("x:3001")
             self.assertIsNotNone(legacy_name)
             legacy = vault / "01. Signal" / str(legacy_name)
@@ -101,9 +106,10 @@ class SignalTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             ingest_signals(vault, fixture_payload(), collector="grok-build", now=NOW)
+            source = signal_path(vault, "x:3001")
             canonical = vault / "01. Signal" / signal_filename("x:3001")
             legacy = vault / "01. Signal" / str(legacy_signal_filename("x:3001"))
-            canonical.rename(legacy)
+            source.rename(legacy)
 
             preview = migrate_signal_filenames(vault)
             result = migrate_signal_filenames(vault, dry_run=False)
@@ -124,7 +130,11 @@ class SignalTests(unittest.TestCase):
             self.assertEqual(first.created, 1)
             self.assertEqual(second.created, 0)
             self.assertEqual(second.duplicates, 1)
-            self.assertEqual(len(list((vault / "01. Signal").glob("manual-*.md"))), 1)
+            records = list((vault / "01. Signal").glob("*.md"))
+            self.assertEqual(len(records), 1)
+            properties, _ = read_frontmatter(records[0])
+            self.assertEqual(properties["display_title"], "My private idea")
+            self.assertEqual(properties["triage_status"], "pending")
 
     def test_invalid_batch_writes_nothing(self):
         with TemporaryDirectory() as tmp:
@@ -175,9 +185,7 @@ class SignalTests(unittest.TestCase):
                 {"self_fit": 4, "novelty": 3, "why_today": "A fresh primary source appeared."}
             )
             ingest_signals(Path(tmp), payload, collector="grok-build", now=NOW)
-            properties, _ = read_frontmatter(
-                Path(tmp) / "01. Signal" / signal_filename("x:3001")
-            )
+            properties, _ = read_frontmatter(signal_path(Path(tmp), "x:3001"))
             self.assertEqual(properties["self_fit"], 4)
             self.assertEqual(properties["novelty"], 3)
             self.assertEqual(properties["why_today"], "A fresh primary source appeared.")
@@ -204,9 +212,7 @@ class SignalTests(unittest.TestCase):
             )
 
             ingest_signals(Path(tmp), payload, collector="grok-build", now=NOW)
-            properties, body = read_frontmatter(
-                Path(tmp) / "01. Signal" / signal_filename("x:3001")
-            )
+            properties, body = read_frontmatter(signal_path(Path(tmp), "x:3001"))
 
             self.assertTrue(properties["quote_candidate"])
             self.assertEqual(properties["signal_type"], "quote_candidate")
@@ -258,9 +264,7 @@ class SignalTests(unittest.TestCase):
                 }
             )
             ingest_signals(Path(tmp), payload, collector="grok-build", now=NOW)
-            properties, body = read_frontmatter(
-                Path(tmp) / "01. Signal" / signal_filename("x:3001")
-            )
+            properties, body = read_frontmatter(signal_path(Path(tmp), "x:3001"))
             self.assertTrue(properties["reply_candidate"])
             self.assertEqual(properties["signal_type"], "reply_candidate")
             self.assertIn("## Reply 机会", body)
@@ -269,6 +273,39 @@ class SignalTests(unittest.TestCase):
             invalid["items"][0].update({"reply_candidate": True})
             with self.assertRaises(ValueError):
                 ingest_signals(Path(tmp) / "invalid", invalid, collector="grok-build", now=NOW)
+
+    def test_same_author_and_title_with_distinct_x_ids_creates_distinct_signals(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = fixture_payload()
+            payload["items"] = [
+                {
+                    **payload["items"][0],
+                    "source_id": "x:9001",
+                    "source_url": "https://x.com/alpha/status/9001",
+                    "text": "The same readable title.",
+                },
+                {
+                    **payload["items"][0],
+                    "source_id": "x:9002",
+                    "source_url": "https://x.com/alpha/status/9002",
+                    "text": "The same readable title.",
+                },
+            ]
+
+            first = ingest_signals(vault, payload, collector="grok-build", now=NOW)
+            second = ingest_signals(
+                vault,
+                {**payload, "items": payload["items"][:1]},
+                collector="grok-build",
+                now=NOW,
+            )
+
+            self.assertEqual(first.created, 2)
+            self.assertEqual(second.created, 0)
+            self.assertEqual(second.duplicates, 1)
+            self.assertEqual(len(list((vault / "01. Signal").glob("*.md"))), 2)
+            self.assertNotEqual(signal_path(vault, "x:9001"), signal_path(vault, "x:9002"))
 
 
 if __name__ == "__main__":

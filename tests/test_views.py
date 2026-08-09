@@ -3,7 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-from nextx.signals import add_manual_signal, ingest_signals, signal_filename
+from nextx.signals import add_manual_signal, ingest_signals, signal_path
 from nextx.records import update_frontmatter
 from nextx.decisions import save_decision
 from nextx.vault import atomic_write_text, init_vault
@@ -69,7 +69,7 @@ class ViewTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
-            signal = vault / "01. Signal" / signal_filename("x:5000")
+            signal = signal_path(vault, "x:5000")
             signal.write_text(signal.read_text(encoding="utf-8") + "\nmanual source note\n", encoding="utf-8")
 
             render_today(vault, now=BASE)
@@ -89,7 +89,7 @@ class ViewTests(unittest.TestCase):
             index = vault / ".nextx" / "index.json"
             self.assertTrue(index.exists())
 
-            signal = vault / "01. Signal" / signal_filename("x:5000")
+            signal = signal_path(vault, "x:5000")
             update_frontmatter(signal, {"author_handle": "edited-author"})
             render_today(vault, now=BASE)
             self.assertIn(
@@ -150,7 +150,7 @@ class ViewTests(unittest.TestCase):
             vault = Path(tmp)
             ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
             update_frontmatter(
-                vault / "01. Signal" / signal_filename("x:5000"),
+                signal_path(vault, "x:5000"),
                 {
                     "reply_candidate": True,
                     "reply_window_ends_at": (BASE + timedelta(days=1)).isoformat(),
@@ -166,7 +166,7 @@ class ViewTests(unittest.TestCase):
             vault = Path(tmp)
             ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
             update_frontmatter(
-                vault / "01. Signal" / signal_filename("x:5000"), {"account_key": "other"}
+                signal_path(vault, "x:5000"), {"account_key": "other"}
             )
 
             result = render_today(vault, now=BASE)

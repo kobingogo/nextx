@@ -13,7 +13,7 @@ from nextx.artifacts import (
 )
 from nextx.decisions import save_decision
 from nextx.records import read_frontmatter, update_frontmatter
-from nextx.signals import ingest_signals, signal_filename
+from nextx.signals import ingest_signals, signal_path
 
 
 SIGNALS = Path(__file__).parent / "fixtures" / "grok-signals.json"
@@ -297,7 +297,7 @@ class ArtifactTests(unittest.TestCase):
                 )
 
             update_frontmatter(
-                vault / "01. Signal" / signal_filename("x:3001"),
+                signal_path(vault, "x:3001"),
                 {"source_url": "https://x.com/other/status/3001", "author_handle": "other"},
             )
             with self.assertRaises(ValueError):

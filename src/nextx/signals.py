@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .naming import human_signal_filename, signal_display_title
 from .record_index import resolve_record_path
 from .records import read_frontmatter, update_frontmatter
 from .vault import atomic_write_json, atomic_write_text, init_vault, vault_lock
@@ -310,22 +311,24 @@ def parse_signal_payload(payload: object, collector: str) -> list[Signal]:
 def legacy_signal_filename(signal_id: str) -> str | None:
     """Return the pre-v0.2 filename, when that representation was possible.
 
-    Older Vaults used a lossy slug as the filename.  Keep this helper private to
-    compatibility resolution; new writes must always use :func:`signal_filename`.
+    Older Vaults used a lossy slug as the filename. Keep this helper only for
+    compatibility resolution and the explicit legacy migration command.
     """
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", signal_id).strip("-")
     return f"{safe}.md" if safe else None
 
 
 def signal_filename(signal_id: str) -> str:
-    """Return a stable, collision-resistant filename for a Signal identity.
+    """Return the legacy stable, collision-resistant filename for a Signal identity.
 
     A filename is an index, not the identity itself.  The old ``feed:a`` →
     ``feed-a.md`` transformation silently merged distinct source IDs such as
     ``feed:a`` and ``feed-a``.  Retain a readable prefix while adding the full
     SHA-256 of the original Unicode identifier.  The 160-character prefix keeps
     the resulting filename below common 255-byte filesystem limits for the
-    validated 256-character source IDs.
+    validated 256-character source IDs. New captures use
+    :func:`nextx.naming.human_signal_filename`; this name remains for old Vault
+    compatibility and explicit migration.
     """
     if not isinstance(signal_id, str) or not signal_id:
         raise ValueError("Signal ID must be a non-empty string")
@@ -357,9 +360,9 @@ def signal_path(vault: Path, signal_id: str) -> Path:
 def migrate_signal_filenames(vault: Path, *, dry_run: bool = True) -> dict[str, object]:
     """Explicitly migrate legacy Signal filenames without breaking Obsidian links.
 
-    Legacy names remain supported at read time.  Applying this migration adds
+    Legacy names remain supported at read time. Applying this migration adds
     the old stem as an Obsidian alias before the atomic rename, so existing
-    links keep resolving while new records use collision-resistant names.
+    links keep resolving while historical records use the prior hashed index.
     """
     vault = vault.expanduser().resolve()
     directory = vault / "01. Signal"
@@ -378,6 +381,8 @@ def migrate_signal_filenames(vault: Path, *, dry_run: bool = True) -> dict[str, 
                 or not isinstance(signal_id, str)
                 or not signal_id
             ):
+                continue
+            if path.name != legacy_signal_filename(signal_id):
                 continue
             target = directory / signal_filename(signal_id)
             if path == target:
@@ -442,6 +447,7 @@ def _content_fingerprint(text: str) -> str:
 
 
 def render_signal(signal: Signal, captured_at: datetime) -> str:
+    display_title = signal_display_title(signal.text)
     signal_type = (
         "quote_candidate"
         if signal.quote_candidate
@@ -474,6 +480,8 @@ def render_signal(signal: Signal, captured_at: datetime) -> str:
         f"reply_window_ends_at: {_json(signal.reply_window_ends_at)}",
         f"content_fingerprint: {_json(_content_fingerprint(signal.text))}",
         'analysis_status: "pending"',
+        f"display_title: {_json(display_title)}",
+        'triage_status: "pending"',
         "---",
     ]
     source = signal.source_url or "无外部 URL"
@@ -504,10 +512,7 @@ def render_signal(signal: Signal, captured_at: datetime) -> str:
 
 ## 快速判断
 
-- 内容柱：
-- Self 匹配：
-- 值得深拆：
-- 原因：
+尚未判断。
 
 ## Quote 机会
 
@@ -571,7 +576,15 @@ def ingest_signals(
                 exists = True
             except FileNotFoundError:
                 exists = False
-            target = vault / "01. Signal" / signal_filename(signal.id)
+            display_title = signal_display_title(signal.text)
+            observed_at = signal.published_at or signal.retrieved_at or timestamp.isoformat()
+            target = vault / "01. Signal" / human_signal_filename(
+                signal_id=signal.id,
+                platform=signal.platform,
+                author_handle=signal.author_handle,
+                observed_at=observed_at,
+                display_title=display_title,
+            )
             if signal.id in written or exists:
                 continue
             if target.exists():
