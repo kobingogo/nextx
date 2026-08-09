@@ -16,7 +16,7 @@ NextX 是本地优先的 X 运营决策工作台：收集热点、对标帖、�
 - 起号 Quote Sprint：只读采集具备时效窗口的原帖候选、每位作者去重、`quote` 裁决与锁定原帖的 QT 草稿。
 - 起号 Reply Sprint：只读发现可推进讨论的入口、锁定原帖和窗口、受限 `reply-post` 草稿；绝不自动互动。
 - twitter-cli Bookmarks 只读同步，支持 3 分钟轮询。
-- 手动 Signal、逐条 Quick Triage、可解释候选优先级、按内容泳道分类的 Signal Inbox，以及内容去重。
+- 手动 Signal、逐条 Quick Triage、可解释候选优先级、按内容泳道分类的 Signal Inbox、内容去重，以及 Today 最多 10 条自动候选 + 2 条手动候选。
 - 可持久化的单帖深拆、`do / defer / kill`（含复访时间）Decision、三温度写作交接。
 - Growth Strategy 与 `growth-loop`：把账号阶段、周目标、目标读者、已写草稿和待复盘帖子压成一个“下一步行动”。
 - 每个 `do` 的增长契约、Thread Pack + Asset Manifest、发布检查清单 + 人工确认闸门、1h/24h/7d Outcome、同执行模式 × 同目标的 4 周记分卡与证据化 Playbook 门槛。

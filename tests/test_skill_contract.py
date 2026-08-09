@@ -17,6 +17,7 @@ class SkillContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("triage-input.v1.json", contracts_text)
+        self.assertIn("contracts --name triage", skill_text)
         self.assertIn("triage-brief", skill_text)
         self.assertIn("save-triage", skill_text)
         self.assertIn("migrate-signal-usability", operations_text)

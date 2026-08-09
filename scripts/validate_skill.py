@@ -49,6 +49,10 @@ def validate() -> None:
     triage_route = ("triage-brief", "save-triage", "signal-inbox")
     for expected in triage_route:
         require(expected in text, f"Skill is missing Signal triage behavior: {expected}")
+    require(
+        "contracts --name triage" in text,
+        "Skill must look up the exact Quick Triage contract before producing JSON",
+    )
     require("agent_skills" in text and "force-agent-skills" in text, "Skill must handle cross-Agent installation safely")
     require("初始化 NextX" in text, "Skill must expose the one-sentence initialization trigger")
     contract_reference = SKILL / "references" / "contracts.md"
