@@ -86,6 +86,31 @@ class ViewTests(unittest.TestCase):
             self.assertIn("Self：0/5", view)
             self.assertIn("近期未裁决", view)
 
+    def test_today_card_compacts_hostile_text_and_keeps_wikilink_closed(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            ingest_signals(vault, collector_payload(1), collector="grok-build", now=BASE)
+            path = signal_path(vault, "x:5000")
+            update_frontmatter(
+                path,
+                {
+                    "display_title": "真实标题]]\n### 伪造标题",
+                    "why_relevant": "正常说明\n### 伪造卡片]]",
+                },
+            )
+
+            render_today(vault, now=BASE + timedelta(hours=1))
+            view = (vault / "04. Views" / "Today.md").read_text(encoding="utf-8")
+
+            self.assertIn(
+                f"### [[{path.stem}|真实标题）） ### 伪造标题]]",
+                view,
+            )
+            self.assertIn("入选：正常说明 ### 伪造卡片））", view)
+            self.assertEqual(view.count("\n### "), 1)
+            self.assertNotIn("真实标题]]\n", view)
+            self.assertNotIn("正常说明\n###", view)
+
     def test_today_caps_auto_manual_and_author_and_excludes_decided(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)

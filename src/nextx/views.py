@@ -77,11 +77,20 @@ def _signal_queue_state(
     return excluded, revisit_due, completed_count
 
 
+def _safe_card_text(value: object, fallback: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return fallback
+    return " ".join(value.split()).replace("|", "／").replace("]", "）")
+
+
 def _card(path: Path, properties: dict[str, object], reason: str) -> str:
-    title = properties.get("display_title") or properties.get("id") or path.stem
+    title = _safe_card_text(
+        properties.get("display_title") or properties.get("id") or path.stem,
+        path.stem,
+    )
     action = properties.get("recommended_action") or "待判断"
     triage = properties.get("triage_score")
-    why = properties.get("why_relevant") or reason
+    why = _safe_card_text(properties.get("why_relevant") or reason, "待补充")
     author = properties.get("author_handle")
     author_text = f"@{author}" if author else "手动输入"
     source = properties.get("source_url") or "本地内容"

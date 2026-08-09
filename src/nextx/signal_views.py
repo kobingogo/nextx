@@ -11,8 +11,8 @@ from .triage import (
     ACTIONS,
     CONFIDENCE_LEVELS,
     CONTENT_LANES,
-    FACTOR_WEIGHTS,
     triage_is_stale,
+    triage_score,
 )
 from .vault import atomic_write_text, init_vault, vault_lock
 
@@ -68,28 +68,30 @@ def _score(properties: dict[str, object]) -> int:
     return value
 
 
+def _score_matches_factors(properties: dict[str, object]) -> bool:
+    factors = properties.get("triage_factors")
+    if not isinstance(factors, dict):
+        return False
+    try:
+        computed = triage_score(factors)
+    except ValueError:
+        return False
+    return _score(properties) == computed
+
+
 def _valid_ready_triage(properties: dict[str, object]) -> bool:
     title = properties.get("display_title")
     lane = properties.get("content_lane")
     action = properties.get("recommended_action")
     confidence = properties.get("triage_confidence")
-    factors = properties.get("triage_factors")
     return (
         properties.get("triage_version") == 1
         and isinstance(title, str)
         and bool(title.strip())
         and lane in CONTENT_LANES
         and action in ACTIONS - {"archive"}
-        and _score(properties) >= 0
+        and _score_matches_factors(properties)
         and confidence in CONFIDENCE_LEVELS
-        and isinstance(factors, dict)
-        and set(factors) == set(FACTOR_WEIGHTS)
-        and all(
-            isinstance(value, int)
-            and not isinstance(value, bool)
-            and 0 <= value <= 5
-            for value in factors.values()
-        )
         and isinstance(properties.get("triage_action_eligible"), bool)
         and (
             action not in {"quote", "reply"}

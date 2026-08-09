@@ -21,14 +21,15 @@ class SignalViewTests(unittest.TestCase):
             result = render_signal_inboxes(vault, now=NOW)
             root = vault / "04. Views" / "Signals"
             immediate = (root / "Immediate Action.md").read_text(encoding="utf-8")
+            productivity = (root / "AI Productivity.md").read_text(encoding="utf-8")
             archived = (root / "Archived.md").read_text(encoding="utf-8")
             needs = (root / "Needs Triage.md").read_text(encoding="utf-8")
 
-            self.assertEqual(result["counts"]["immediate_action"], 1)
+            self.assertEqual(result["counts"]["immediate_action"], 2)
             self.assertEqual(result["counts"]["archived"], 1)
             self.assertEqual(result["counts"]["needs_triage"], 2)
             self.assertEqual(result["counts"]["builder_core"], 1)
-            self.assertEqual(result["counts"]["ai_productivity"], 1)
+            self.assertEqual(result["counts"]["ai_productivity"], 2)
             self.assertEqual(result["counts"]["ai_content"], 1)
             self.assertEqual(result["counts"]["adjacent_exploration"], 1)
             self.assertIn("Agent 工作流正在进入基础设施阶段", immediate)
@@ -40,6 +41,8 @@ class SignalViewTests(unittest.TestCase):
             self.assertIn("价值增量", immediate)
             self.assertIn("单一案例不能代表市场", immediate)
             self.assertIn((NOW + timedelta(hours=3)).isoformat(), immediate)
+            self.assertIn("Reply 也进入即时行动", immediate)
+            self.assertIn("Reply 也进入即时行动", productivity)
             self.assertNotIn("x:quote", immediate)
             self.assertIn("低价值重复信息", archived)
             self.assertIn("等待快速判断", needs)
@@ -73,6 +76,45 @@ class SignalViewTests(unittest.TestCase):
             self.assertIn("未知内容赛道", needs)
             self.assertIn("无效评分", needs)
             self.assertNotIn(stale.stem, builder)
+
+    def test_mismatched_score_or_invalid_factors_fail_closed_into_needs_triage(self):
+        mutations = (
+            ("score-mismatch", {"triage_score": 71}),
+            (
+                "invalid-factors",
+                {
+                    "triage_factors": {
+                        "reader_fit": True,
+                        "evidence": 4,
+                        "value_add": 3,
+                        "urgency": 2,
+                    }
+                },
+            ),
+        )
+        for name, changes in mutations:
+            with self.subTest(name=name):
+                with TemporaryDirectory() as tmp:
+                    vault = self.make_triaged_vault(
+                        Path(tmp), include_baseline=False
+                    )
+                    record = self.add_record(
+                        vault,
+                        name,
+                        title=name,
+                        lane="builder_core",
+                        score=70,
+                    )
+                    update_frontmatter(record, changes)
+
+                    result = render_signal_inboxes(vault, now=NOW)
+                    root = vault / "04. Views" / "Signals"
+                    needs = (root / "Needs Triage.md").read_text(encoding="utf-8")
+                    builder = (root / "Builder Core.md").read_text(encoding="utf-8")
+
+                    self.assertEqual(result["counts"]["needs_triage"], 1)
+                    self.assertIn(name, needs)
+                    self.assertNotIn(name, builder)
 
     def test_malformed_ready_action_window_fails_closed_into_needs_triage(self):
         with TemporaryDirectory() as tmp:
@@ -162,7 +204,13 @@ class SignalViewTests(unittest.TestCase):
                 title="稍晚高分",
                 lane="builder_core",
                 action="quote",
-                score=99,
+                score=98,
+                factors={
+                    "reader_fit": 5,
+                    "evidence": 5,
+                    "value_add": 5,
+                    "urgency": 4,
+                },
                 deadline=NOW + timedelta(hours=5),
             )
             self.add_record(
@@ -172,6 +220,12 @@ class SignalViewTests(unittest.TestCase):
                 lane="builder_core",
                 action="reply",
                 score=40,
+                factors={
+                    "reader_fit": 2,
+                    "evidence": 2,
+                    "value_add": 2,
+                    "urgency": 2,
+                },
                 deadline=NOW + timedelta(hours=1),
             )
 
@@ -198,7 +252,21 @@ class SignalViewTests(unittest.TestCase):
             lane="builder_core",
             action="quote",
             score=87,
+            factors={
+                "reader_fit": 5,
+                "evidence": 4,
+                "value_add": 4,
+                "urgency": 4,
+            },
             deadline=NOW + timedelta(hours=3),
+        )
+        self.add_record(
+            vault,
+            "reply",
+            title="Reply 也进入即时行动",
+            lane="ai_productivity",
+            action="reply",
+            deadline=NOW + timedelta(hours=2),
         )
         self.add_record(
             vault, "productivity", title="生产力实践", lane="ai_productivity"
@@ -252,6 +320,7 @@ class SignalViewTests(unittest.TestCase):
         status: str = "ready",
         action: str | None = "topic",
         score: int | None = 70,
+        factors: dict[str, object] | None = None,
         confidence: str | None = "high",
         eligible: bool | None = True,
         deadline: datetime | None = None,
@@ -268,12 +337,8 @@ class SignalViewTests(unittest.TestCase):
             "captured_at": (NOW - timedelta(minutes=10)).isoformat(),
             "display_title": title,
             "triage_status": status,
-            "triage_factors": {
-                "reader_fit": 4,
-                "evidence": 4,
-                "value_add": 3,
-                "urgency": 2,
-            },
+            "triage_factors": factors
+            or {"reader_fit": 4, "evidence": 4, "value_add": 3, "urgency": 2},
             "why_relevant": "与 Builder 读者当前需求直接相关",
             "value_add": "价值增量：解释工具与基础设施的边界",
             "risk": "单一案例不能代表市场",
