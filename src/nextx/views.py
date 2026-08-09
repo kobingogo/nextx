@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-import json
 import math
 from pathlib import Path
 import re
 
 from .records import read_frontmatter
+from .record_index import indexed_records
 from .self_model import growth_strategy, self_readiness
 from .vault import atomic_write_text, init_vault, vault_lock
 
@@ -31,59 +31,7 @@ def _timestamp(properties: dict[str, object]) -> datetime:
 
 
 def _records(folder: Path, record_type: str) -> list[tuple[Path, dict[str, object]]]:
-    records: list[tuple[Path, dict[str, object]]] = []
-    if not folder.exists():
-        return records
-    index_path = folder.parent / ".nextx" / "index.json"
-    try:
-        index = json.loads(index_path.read_text(encoding="utf-8"))
-        if (
-            not isinstance(index, dict)
-            or index.get("schema_version") != 1
-            or not isinstance(index.get("folders"), dict)
-        ):
-            raise ValueError("invalid index")
-    except (OSError, ValueError, json.JSONDecodeError):
-        index = {"schema_version": 1, "folders": {}}
-    folders = index["folders"]
-    cached = folders.get(folder.name, {})
-    cached = cached if isinstance(cached, dict) else {}
-    current: dict[str, object] = {}
-    for path in folder.glob("*.md"):
-        try:
-            stat = path.stat()
-            entry = cached.get(path.name)
-            if (
-                isinstance(entry, dict)
-                and entry.get("mtime_ns") == stat.st_mtime_ns
-                and entry.get("size") == stat.st_size
-                and isinstance(entry.get("properties"), dict)
-            ):
-                properties = entry["properties"]
-            else:
-                properties, _ = read_frontmatter(path)
-            current[path.name] = {
-                "mtime_ns": stat.st_mtime_ns,
-                "size": stat.st_size,
-                "properties": properties,
-            }
-        except (OSError, ValueError):
-            continue
-        # A Vault can contain copied notes from another account.  Legacy notes
-        # without an account key predate the registry and remain readable, but
-        # an explicit non-primary key must never leak into this single-account
-        # workspace's queues or metrics.
-        if properties.get("type") == record_type and properties.get("account_key", "primary") == "primary":
-            records.append((path, properties))
-    if current != cached:
-        folders[folder.name] = current
-        index_path.parent.mkdir(parents=True, exist_ok=True)
-        with vault_lock(folder.parent):
-            atomic_write_text(
-                index_path,
-                json.dumps(index, ensure_ascii=False, separators=(",", ":")) + "\n",
-            )
-    return records
+    return indexed_records(folder.parent, folder.name, record_type)
 
 
 def _parse_time(value: object) -> datetime | None:

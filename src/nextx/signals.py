@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .record_index import resolve_record_path
 from .records import read_frontmatter, update_frontmatter
 from .vault import atomic_write_json, atomic_write_text, init_vault, vault_lock
 
@@ -340,23 +341,17 @@ def signal_path(vault: Path, signal_id: str) -> Path:
     source ID.  This permits a safe, explicit migration later without breaking
     existing Vaults or accidentally reading the wrong record.
     """
-    directory = vault / "01. Signal"
-    canonical = directory / signal_filename(signal_id)
-    candidates = [canonical]
-    legacy = legacy_signal_filename(signal_id)
-    if legacy is not None and legacy != canonical.name:
-        candidates.append(directory / legacy)
-    for candidate in candidates:
-        if not candidate.is_file():
-            continue
-        properties, _ = read_frontmatter(candidate)
-        if properties.get("id") == signal_id:
-            return candidate
-        if candidate == canonical:
-            raise ValueError(
-                f"Signal filename identity mismatch in {candidate}; refusing to use a corrupted record"
-            )
-    raise FileNotFoundError(f"Signal not found: {signal_id}")
+    try:
+        return resolve_record_path(vault, "01. Signal", "signal", signal_id)
+    except FileNotFoundError:
+        old_canonical = vault / "01. Signal" / signal_filename(signal_id)
+        if old_canonical.is_file():
+            properties, _ = read_frontmatter(old_canonical)
+            if properties.get("id") != signal_id:
+                raise ValueError(
+                    f"Signal filename identity mismatch in {old_canonical}; refusing corrupted data"
+                )
+        raise
 
 
 def migrate_signal_filenames(vault: Path, *, dry_run: bool = True) -> dict[str, object]:
