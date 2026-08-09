@@ -15,6 +15,7 @@ from typing import Iterator
 VAULT_FOLDERS = (
     "00. Self",
     "01. Signal",
+    "01. Topic",
     "02. Decision",
     "03. Artifact",
     "04. Views",

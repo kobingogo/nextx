@@ -20,6 +20,7 @@ from .bookmarks import (
     write_bookmark_health,
 )
 from .clusters import build_cluster_brief, record_cluster_failure, render_topic_clusters, save_clusters
+from .topics import build_topic_brief, save_topic
 from .accounts import account_status
 from .analysis import build_analysis_brief, save_analysis
 from .artifacts import (
@@ -244,6 +245,18 @@ def _parser() -> argparse.ArgumentParser:
         "topic-inbox", help="Rebuild the validated Topic Cluster View"
     )
     _add_vault_argument(topic_inbox)
+
+    topic_brief = subparsers.add_parser(
+        "topic-brief", help="Prepare one current Topic Cluster for topic-engine P3"
+    )
+    _add_vault_argument(topic_brief)
+    topic_brief.add_argument("cluster_id")
+
+    save_topic_parser = subparsers.add_parser(
+        "save-topic", help="Validate and explicitly persist one Topic Card"
+    )
+    _add_vault_argument(save_topic_parser)
+    save_topic_parser.add_argument("--input-json", required=True, type=Path)
 
     save_triage_parser = subparsers.add_parser(
         "save-triage", help="Validate and save one Signal quick triage"
@@ -724,6 +737,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             code = 0
         elif arguments.command == "topic-inbox":
             result = render_topic_clusters(resolve_vault(arguments.vault))
+            code = 0
+        elif arguments.command == "topic-brief":
+            vault = resolve_vault(arguments.vault)
+            result = _persist_handoff(
+                vault, "topic", arguments.cluster_id, build_topic_brief(vault, arguments.cluster_id)
+            )
+            code = 0
+        elif arguments.command == "save-topic":
+            result = save_topic(resolve_vault(arguments.vault), _load_input(arguments.input_json))
             code = 0
         elif arguments.command == "save-triage":
             result = save_triage(

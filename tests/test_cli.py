@@ -14,6 +14,8 @@ from nextx.cli import _load_input, main
 from nextx.records import update_frontmatter
 from nextx.self_model import configure_self
 from nextx.signals import ingest_signals, signal_path
+from nextx.clusters import build_cluster_brief, save_clusters
+from nextx.triage import save_triage
 from nextx.twitter_cli import TwitterCLIError
 
 
@@ -110,6 +112,28 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result["command"], "topic-inbox")
             self.assertEqual(result["status"], "unavailable")
             self.assertTrue(Path(result["view"]).is_file())
+
+    def test_topic_brief_persists_only_when_explicitly_invoked_and_save_topic_writes_card(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            self._make_topic_cluster(vault)
+            cluster_id = json.loads((vault / ".nextx" / "clusters.json").read_text(encoding="utf-8"))["clusters"][0]["cluster_id"]
+
+            brief_code, brief_stdout, brief_stderr = run_cli(["topic-brief", "--vault", tmp, cluster_id])
+            brief = json.loads(brief_stdout)
+            self.assertEqual(brief_code, 0)
+            self.assertEqual(brief_stderr, "")
+            self.assertTrue(Path(brief["handoff_path"]).is_file())
+            self.assertIn("topic-engine", brief["brief"])
+
+            input_path = vault / "topic.json"
+            input_path.write_text(json.dumps(self._topic_payload(cluster_id)), encoding="utf-8")
+            save_code, save_stdout, save_stderr = run_cli(["save-topic", "--vault", tmp, "--input-json", str(input_path)])
+            saved = json.loads(save_stdout)
+            self.assertEqual(save_code, 0)
+            self.assertEqual(save_stderr, "")
+            self.assertEqual(saved["command"], "save-topic")
+            self.assertTrue(Path(saved["path"]).is_file())
 
     def test_argument_errors_are_structured_json(self):
         code, stdout, stderr = run_cli(["not-a-command"])
@@ -613,7 +637,7 @@ class CLITests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(
             {item["name"] for item in result["contracts"]},
-            {"self", "collector", "triage", "cluster", "analysis", "decision", "artifact", "outcome"},
+            {"self", "collector", "triage", "cluster", "topic", "analysis", "decision", "artifact", "outcome"},
         )
         self.assertTrue(all(Path(item["path"]).is_file() for item in result["contracts"]))
 
@@ -806,6 +830,31 @@ class CLITests(unittest.TestCase):
         payload = json.loads(TRIAGE_FIXTURE.read_text(encoding="utf-8"))
         payload["signal_id"] = signal_id
         return payload
+
+    def _make_topic_cluster(self, vault: Path) -> None:
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        ingest_signals(
+            vault,
+            {"schema_version": 1, "account_key": "primary", "collector": "grok-build", "retrieved_at": now.isoformat(), "items": [
+                {"source_id": "x:801", "platform": "x", "source_url": "https://x.com/one/status/801", "author_handle": "one", "published_at": now.isoformat(), "text": "First CLI source", "source_confidence": "high"},
+                {"source_id": "x:802", "platform": "x", "source_url": "https://x.com/two/status/802", "author_handle": "two", "published_at": now.isoformat(), "text": "Second CLI source", "source_confidence": "high"},
+            ]},
+            collector="grok-build", now=now,
+        )
+        for signal_id in ("x:801", "x:802"):
+            save_triage(vault, {
+                "schema_version": 1, "account_key": "primary", "signal_id": signal_id, "display_title": "Ready CLI Signal", "language": "en", "content_lane": "builder_core", "topic_labels": ["AI"], "triage_status": "ready", "recommended_action": "topic", "triage_factors": {"reader_fit": 5, "evidence": 5, "value_add": 5, "urgency": 5}, "triage_confidence": "high", "summary": "Ready.", "target_reader": "Builders", "why_relevant": "Relevant.", "value_add": "Useful.", "risk": "Small sample.", "deep_dive": False, "reason_codes": ["fit"],
+            }, now=now)
+        brief = build_cluster_brief(vault, now=now)
+        save_clusters(vault, {
+            "schema_version": 1, "account_key": "primary", "cluster_run_id": brief["cluster_run_id"],
+            "clusters": [{"kind": "evergreen", "signal_ids": ["x:801", "x:802"], "display_title": "CLI workflows", "proposition": "Systems beat tricks.", "confidence": "high", "why_now": "Recent.", "target_reader": "Builders", "candidate_angle": "Systems.", "recommended_next_step": "topic_card", "evidence": [{"signal_id": "x:801", "quote": "First CLI source", "role": "support", "translation_status": "original"}, {"signal_id": "x:802", "quote": "Second CLI source", "role": "counter", "translation_status": "original"}]}], "adjacent_candidates": [],
+        }, now=now)
+
+    def _topic_payload(self, cluster_id: str) -> dict[str, object]:
+        return {
+            "schema_version": 1, "account_key": "primary", "cluster_id": cluster_id, "status": "active", "suggested_mode": "original", "display_title": "CLI durable workflows", "proposition": "Systems beat tricks.", "content_lane": "builder_core", "target_reader": "Builders", "takeaway": "A reusable workflow checklist.", "value_type": "tool", "primary_platform": "x", "secondary_platform": "newsletter", "recommended_angle": "Contrast systems and tricks.", "title_directions": ["Strategy", "Checklist"], "quality_gates": {"human": "Direct observation.", "useful": "Checklist.", "timely": "Evergreen.", "identity_leverage": "Builder perspective."}, "ip_dimensions": {"differentiation": 1, "depth": 1, "perspective": 1, "clarity": 1, "courage": 1, "shareability": 1}, "traffic_dimensions": {"benefit_visibility": 5, "hook_strength": 4, "asset_promise": 5, "actionability": 5}, "ip_band": "S", "traffic_band": "strong_hook", "decision_class": "compound", "why_worth_doing": "Two sources.", "evidence": [{"signal_id": "x:801", "quote": "First CLI source", "role": "support", "translation_status": "original"}, {"signal_id": "x:802", "quote": "Second CLI source", "role": "counter", "translation_status": "original"}], "counterpoint": "Prompts can still help.", "evidence_to_strengthen": "A direct comparison.", "max_risk": "Small sample.", "confidence": "high", "compliance": {"band": "green", "reason": "Method-focused.", "mitigation": ""}, "action_signal_id": None, "revisit_at": None, "notes": "Explicit save.",
+        }
 
     def make_signal_vault(self, vault: Path) -> Path:
         now = datetime.now(timezone.utc).replace(microsecond=0)
