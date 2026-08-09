@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "account_key": "primary",
+  "signal_id": "x:3001",
+  "display_title": "A verifiable AI agent trend",
+  "language": "en",
+  "content_lane": "builder_core",
+  "topic_labels": ["AI agents", "workflow"],
+  "topic_cluster_id": null,
+  "triage_status": "ready",
+  "recommended_action": "topic",
+  "triage_factors": {
+    "reader_fit": 4,
+    "evidence": 4,
+    "value_add": 4,
+    "urgency": 2
+  },
+  "triage_confidence": "high",
+  "summary": "A concrete signal that agent workflows are becoming reusable infrastructure.",
+  "target_reader": "AI builders and advanced AI users",
+  "why_relevant": "It connects implementation practice to a broader productivity shift.",
+  "value_add": "Explain the boundary between a useful tool and a durable workflow.",
+  "risk": "One post alone does not establish a market-wide trend.",
+  "deep_dive": true,
+  "reason_codes": ["audience_fit", "evidence_present"]
+}
