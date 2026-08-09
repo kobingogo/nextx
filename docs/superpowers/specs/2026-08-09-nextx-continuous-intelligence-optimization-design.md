@@ -2,7 +2,7 @@
 
 **日期：** 2026-08-09
 
-**状态：** 待用户审阅
+**状态：** Topic Foundation 分片设计已确认，待实施
 
 **范围：** 单账号、本地优先、只读采集、人工发布
 
@@ -97,6 +97,8 @@ flowchart LR
 - 每个主题合并中外平台信息，不以零散链接充数。
 - 展示一手来源、不同观点、信息差和可写角度。
 - NextX 推荐其中一个进入深拆或选题裁决，其余留在候补库。
+
+这是一条完整每日情报系统的目标，不是当前 Topic Foundation 的交付承诺。Topic Foundation 只整理已经入库且通过 Quick Triage 的 Signal；在跨平台 Collector 落地并验证供给前，它可以交付 0–5 个主题，不能用旧 Signal 或低质量候选填满数量。
 
 #### 结束反馈：约 2 分钟
 
@@ -349,7 +351,7 @@ Signal 始终表示一条可验证的原子来源。Topic Cluster 表示由多�
 
 Topic Cluster 至少包含：
 
-- 稳定 cluster ID；
+- 单次输入窗口内稳定的 cluster ID；
 - 显示标题与一句话命题；
 - 关联 Signal ID；
 - 一手来源；
@@ -363,7 +365,7 @@ Topic Cluster 至少包含：
 
 ### 7.1 交付边界与对象生命周期
 
-本阶段只实现 Topic Cluster 与 Topic Card，不提前实现新的 Collector、向量数据库或自动发帖。输入限于已有且可用的 Signal：`triage_status=ready`、Quick Triage 未因 Strategy 变化而陈旧、未被归档。Cluster 是可重建投影；Topic Card 是用户批准后才写入的权威策划记录。
+本阶段是 **Topic Foundation**，只实现 Topic Cluster 与 Topic Card，不提前实现新的 Collector、向量数据库或自动发帖。输入限于已有且可用的 Signal：`triage_status=ready`、Quick Triage 未因 Strategy 变化而陈旧、未被归档。Cluster 是按一次输入窗口重建的投影；Topic Card 是用户批准后才写入的权威策划记录。它减少存量 Signal 的筛选时间，不单独承诺每日跨平台供给。
 
 ```text
 ready Signal → Cluster proposal → 派生 Cluster / Topics View
@@ -382,17 +384,19 @@ NextX 不内置模型调用。`cluster-brief` 只读地导出一个有界候选�
 
 每个 Cluster 必须有 2 条或以上 Signal；每条 Signal 在一次运行中最多属于一个 Cluster。不能可靠合并的 Signal 进入 `adjacent_candidates`，而不是以标签相似为由强制拼接。保存端必须拒绝：不存在、重复或不合格的 Signal ID；相同 Signal 出现在多个 Cluster；缺失的标题、命题、证据或置信度；以及来自输入批次以外的引用。
 
-Cluster ID 由账号与该 Cluster 最早进入 Vault 的锚点 Signal ID 确定，例如 `topic:<anchor-short-hash>`。新 Signal 加入不改变 ID；拆分时含原锚点的一支保留 ID；合并时保留最早锚点的 ID，并在派生记录中列出被合并的旧 ID。该规则保证重建、排序和增量补证据后仍可稳定链接，不把 Agent 文案当作身份来源。
+Cluster 身份只在一次 `cluster_run_id` 输入窗口内稳定：`id` 由该窗口、排序后的 Signal ID 和确定性索引生成。新的运行可以拆分、合并或取消 Cluster，不能伪装成对旧主题的永久修订。跨周、人工策划和下游 Decision 所需的持久身份只属于显式创建的 `topic:<short-id>` Topic Card；卡片保存其来源 `cluster_run_id` 与 Signal 证据快照，不依赖 Cluster 的长期别名、拆分或合并历史。
 
 每条 Cluster 至少包含：
 
 - `id`、`anchor_signal_id`、`signal_ids`、`display_title` 与一句话 `proposition`；
-- 平台、语言、一手来源摘要，以及支持和反例的精确 Signal 引用；
+- 平台、语言、一手来源摘要，以及 `signal_id`、逐字 `quote`、`role=support|counter`、`translation_status=original|inference` 组成的证据引用；
 - `why_now`、目标读者、潜在增量角度、新颖性、证据覆盖、生命周期和置信度；
 - `recommended_next_step`（`watch | topic_card | quote | reply | original`），但它只是建议，不是发布授权；
 - `generated_at` 与 `strategy_snapshot_id`，用于在策略变化后明确显示陈旧状态。
 
-相同输入得到相同 Cluster ID 和成员集合；可变的展示文案可以更新，但不可静默改写任何已保存 Topic Card 的人工字段。
+`save-clusters` 必须验证每条 `quote` 出现在对应 Signal 的原始内容中；按 canonical URL 与作者计算独立来源数，转述、同帖镜像和同作者改写不提高该计数。事件型 Cluster 只接受采集时间在最近 72 小时内的至少一个 Signal；长青型 Cluster 只有在出现新的独立来源或距离上次展示已满 14 天时才重现。后一个展示时间保存在 `.nextx/topic-cluster-history.json`，它只记录内容指纹和时间用于抑制重复，不保存语义 Cluster 的权威身份。相同 `cluster_run_id` 和输入得到相同 Cluster ID 和成员集合；可变的展示文案不能静默改写已保存 Topic Card 的人工字段。
+
+`cluster-brief` 默认最多导出 24 条合格 Signal，按现有 triage 分数、证据与新近度排序；每次保存最多保留 5 个 Cluster，不足时直接报告空位。Agent 或保存端失败时，Topics View 必须显示本次生成失败与时间戳，不能将上一次派生结果冒充当前结果。
 
 ### 7.3 Topic Card 契约与质量闸门
 
@@ -404,23 +408,23 @@ Topic Card 的权威字段包括：
 - 选题判断：目标受众、唯一拿走物、价值类型、首发/次发平台、推荐角度、可选标题方向示意；
 - 质量校准：人感/有用/时机/身份杠杆四道底线、IP 六维、流量四维、IP 档、流量档和决策分类；
 - 证据与风险：精确 Signal 引用、不同观点、需要补强的物证、最大风险、置信度；
-- 运营状态：`candidate | approved | deferred | rejected`、`recommended_action`、可选 `action_signal_id`、`revisit_at` 与人工备注。
+- 策划状态：`active | parked | closed`、仅作建议的 `suggested_mode`、可选 `action_signal_id`、`revisit_at` 与人工备注。
 
-卡片必须有且只有一个“读者唯一拿走物”。所有引用都必须能够逐字回溯到存储的 Signal 原文；翻译或跨语言归纳标为推断，不能伪装成原帖事实。Topic-engine 的合规预检被保存为 `green | yellow | red` 及其处理：红线不得进入 `approved` 或今日主打，黄线必须写明改法。系统不提供阅读量、涨粉或转化承诺。
+卡片必须有且只有一个“读者唯一拿走物”。所有引用都必须能够逐字回溯到存储的 Signal 原文；翻译或跨语言归纳标为推断，不能伪装成原帖事实。Topic-engine 的合规预检被保存为 `green | yellow | red` 及其处理：红线不得进入 `active` 或今日主打，黄线必须写明改法。系统不提供阅读量、涨粉或转化承诺。
 
 ### 7.4 与 Decision 和现有内容链的衔接
 
-Topic Card 的 `approved + original` 可由 `topic-decision-brief TOPIC_ID` 生成一个多 Signal 的原始内容 Decision Brief。返回的 `do / defer / kill` Decision 带可选 `topic_id`，但仍须满足现有 Growth Contract 与逐字证据验证；Artifact 继续只从 `do` Decision 创建。
+Topic Card 的 `active + suggested_mode=original` 可由 `topic-decision-brief TOPIC_ID` 生成一个多 Signal 的原始内容 Decision Brief。返回的 `do / defer / kill` Decision 是唯一的内容执行裁决，带可选 `topic_id`，但仍须满足现有 Growth Contract 与逐字证据验证；Artifact 继续只从 `do` Decision 创建。
 
-`approved + quote` 或 `approved + reply` 仅提供 `action_signal_id` 作为推荐锚点。用户仍需走现有 `quote-brief` 或 `reply-brief`，其中的单 Signal、原始 URL、作者与时间窗口校验保持不变。`watch`、`deferred` 或 `rejected` 卡片不能进入 Artifact 流程。
+`active + suggested_mode=quote` 或 `reply` 仅提供 `action_signal_id` 作为推荐锚点。用户仍需走现有 `quote-brief` 或 `reply-brief`，其中的单 Signal、原始 URL、作者与时间窗口校验保持不变。`parked` 或 `closed` 卡片不能进入 Artifact 流程。
 
 因此数据权威关系保持单向：Signal 保存外部事实；Cluster 保存可重建的综合；Topic Card 保存人工策划判断；Decision 保存内容执行裁决；Artifact 保存草稿与发布状态。
 
 ### 7.5 CLI、视图和验收
 
-新增命令为 `cluster-brief`、`save-clusters`、`topic-brief`、`save-topic`、`topic-inbox` 和 `topic-decision-brief`；前两个命令分别是有界只读输入和派生投影写入，选题卡与 Decision 创建均需明确的用户意图。每次写入使用现有 Vault 锁和原子写入机制。`topic-inbox` 只从 `.nextx/clusters.json` 与 `01. Topic/` 重建，不保存唯一业务信息。
+新增命令按三片落地：Slice 1 提供 `cluster-brief`、`save-clusters`、`topic-inbox`；Slice 2 提供 `topic-brief`、`save-topic`；Slice 3 才提供 `topic-decision-brief`。前两个 Cluster 命令分别是有界只读输入和派生投影写入，选题卡与 Decision 创建均需明确的用户意图。每次写入使用现有 Vault 锁和原子写入机制。`topic-inbox` 只从 `.nextx/clusters.json` 与 `01. Topic/` 重建，不保存唯一业务信息。
 
-验收测试至少覆盖：相同输入的幂等重建；跨中英文同题的可解释合并；低置信相邻候选不合并；无效、重复或陈旧 Signal 的拒绝；稳定锚点 ID 的增量、拆分与合并；精确证据回溯；红黄绿合规闸门；Topic Card 的显式保存和人工字段不被重建覆盖；原始内容的多 Signal Decision 链路；Quote/Reply 不能借 Topic Card 绕过单帖窗口；空候选集和重建失败时显示清晰状态而非旧数据冒充最新结果。
+验收测试至少覆盖：同一 `cluster_run_id` 的幂等重建；跨中英文同题的可解释合并；低置信相邻候选不合并；无效、重复、陈旧或超过输入上限 Signal 的拒绝；逐字证据回溯与独立来源去重；事件/长青时效；红黄绿合规闸门；Topic Card 的显式保存和人工字段不被重建覆盖；原始内容的多 Signal Decision 链路；Quote/Reply 不能借 Topic Card 绕过单帖窗口；空候选集和重建失败时显示清晰状态而非旧数据冒充最新结果。
 
 ## 8. 端到端对象链优化
 
@@ -697,8 +701,8 @@ stale_reason: null
 
 - 所有新 Signal 都有可读 `display_title` 和完整 Quick Triage 状态。
 - 用户不需要打开正文即可从文件名或分类视图理解 Signal 大意。
-- 立即行动队列在前两周后的候选采用率目标为 60% 以上。
-- 正常运营日可在约 30 分钟内完成核心队列；优质机会日可扩展到 60 分钟。
+- 对连续 5 个运营日先记录基线；后续连续 10 个运营日比较“每活跃分钟的采纳数”、从展示到行动的中位耗时、逐字证据完整率和拒绝原因分布。采用率没有达标数字前，不以它单独宣称优化有效。
+- 运营日志自动记录 `presented_at`、`first_action_at` 和被选动作；用户只需选择采纳/候补/拒绝及一个理由码。正常运营日可在约 30 分钟内完成核心队列；优质机会日可扩展到 60 分钟。
 - 无 Signal 身份碰撞、错误覆盖、断裂 Decision 引用或静默策略变化。
 - Decision、Artifact 和 Outcome 可以从 Content Pipeline 连续追踪，且每个活跃对象只有一个明确下一步动作。
 - Thread 只有一份规范正文，不出现定稿与 Thread Pack 漂移。
@@ -708,6 +712,16 @@ stale_reason: null
 - 采集范围保持探索性，用户看到的行动队列保持高精度。
 
 ## 12. 分阶段实施顺序
+
+### 下一开发周期：Topic Foundation 的三个独立切片
+
+这三个切片替代旧的“直接进入跨平台主题情报”做法。每片都可在临时 Vault 独立验收和发布，前一片的真实 Vault 验收通过后才进入下一片：
+
+1. **Slice 1 · 有证据的 Topic Cluster**：从已有合格 Signal 构建受限批次、逐字证据、独立来源和时效受控的派生 Cluster / Topics View；不创建 Topic Card，不修改 Decision。
+2. **Slice 2 · 人工主导的 Topic Card**：从一个现有 Cluster 显式创建持久化卡片，保存 topic-engine 的 P3 判断、合规结果和人工策划状态；Cluster 重建不能覆盖卡片。
+3. **Slice 3 · 原创 Topic 的 Decision 衔接**：仅为 `active + original` Topic Card 生成多 Signal 的 Decision Brief，复用现有 `do / defer / kill`、Growth Contract、Artifact 和 Quote/Reply 单帖安全门。
+
+跨平台 Collector、自动翻译供给、每日 3–5 个新主题和学习权重仍属于后续阶段，不能被任一 Slice 的验收假定已经完成。
 
 ### Phase 1：共享元数据与 Signal 可用性基础
 
@@ -738,7 +752,7 @@ stale_reason: null
 
 - 多平台 Collector；
 - 翻译与语义去重；
-- Topic Cluster 和 Topic Card；
+- 在 Topic Foundation 验证后的跨平台 Cluster 输入扩展；
 - 每日 3–5 个主题简报。
 
 ### Phase 5：信息价值飞轮
