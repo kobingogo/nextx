@@ -34,8 +34,20 @@ def _load_index(index_path: Path) -> dict[str, object]:
 def _is_primary_record(properties: dict[str, object], record_type: str) -> bool:
     return (
         properties.get("type") == record_type
-        and properties.get("account_key", "primary") == "primary"
+        and properties.get("account_key") == "primary"
     )
+
+
+def _record_path(folder: Path, filename: str) -> Path | None:
+    """Return a safe Markdown child path, rejecting cache path traversal."""
+    if Path(filename).name != filename or not filename.endswith(".md"):
+        return None
+    path = folder / filename
+    try:
+        path.resolve().relative_to(folder.resolve())
+    except (OSError, ValueError):
+        return None
+    return path
 
 
 def indexed_records(
@@ -56,9 +68,12 @@ def indexed_records(
 
     if folder.is_dir():
         for path in sorted(folder.glob("*.md")):
+            safe_path = _record_path(folder, path.name)
+            if safe_path is None:
+                continue
             try:
-                stat = path.stat()
-                entry = cached.get(path.name)
+                stat = safe_path.stat()
+                entry = cached.get(safe_path.name)
                 if (
                     isinstance(entry, dict)
                     and entry.get("mtime_ns") == stat.st_mtime_ns
@@ -67,16 +82,17 @@ def indexed_records(
                 ):
                     properties = entry["properties"]
                 else:
-                    properties, _ = read_frontmatter(path)
+                    properties, _ = read_frontmatter(safe_path)
             except (OSError, ValueError):
                 continue
-            current[path.name] = {
+            if not _is_primary_record(properties, record_type):
+                continue
+            current[safe_path.name] = {
                 "mtime_ns": stat.st_mtime_ns,
                 "size": stat.st_size,
                 "properties": properties,
             }
-            if _is_primary_record(properties, record_type):
-                records.append((path, properties))
+            records.append((safe_path, properties))
 
     if current != cached:
         folders[folder_name] = current
@@ -110,7 +126,9 @@ def resolve_record_path(
             properties = entry.get("properties")
             if not isinstance(properties, dict) or properties.get(id_field) != record_id:
                 continue
-            path = folder / filename
+            path = _record_path(folder, filename)
+            if path is None:
+                continue
             try:
                 verified, _ = read_frontmatter(path)
             except (OSError, ValueError):
@@ -123,6 +141,9 @@ def resolve_record_path(
 
     if folder.is_dir():
         for path in sorted(folder.glob("*.md")):
+            path = _record_path(folder, path.name)
+            if path is None:
+                continue
             try:
                 properties, _ = read_frontmatter(path)
             except (OSError, ValueError):

@@ -54,7 +54,7 @@ class ViewTests(unittest.TestCase):
             init_vault(vault)
             atomic_write_text(
                 vault / "02. Decision" / "decision-existing.md",
-                '---\nid: "decision:existing"\ntype: "decision"\nverdict: "kill"\nsignal_ids: ["x:5013"]\n---\nAlready decided.\n',
+                '---\naccount_key: "primary"\nid: "decision:existing"\ntype: "decision"\nverdict: "kill"\nsignal_ids: ["x:5013"]\n---\nAlready decided.\n',
             )
 
             result = render_today(vault, now=BASE + timedelta(hours=1))
