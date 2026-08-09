@@ -50,14 +50,15 @@
 
 | ID | 模块 | 任务 | 优先级 | 状态 | 当前证据 | 完成门槛 |
 | --- | --- | --- | --- | --- | --- | --- |
-| NX-028 | v0.2-rc 稳定化 | 修复 Signal 路径碰撞、Windows 锁探测、Outcome 时间与审计语义、跨账号投影、Reply 队列、收藏完整快照、独立安装依赖与升级路径 | P0 | 进行中 | 已有定向 RED/GREEN 回归；Signal 迁移预览/应用命令、核心 Skill fallback、隔离 venv 包安装已落地 | 完成迁移/安装/跨平台/黄金路径验证、文档和 rc 发布物 |
-| NX-029 | v0.3 决策系统 | 让 Growth Strategy 驱动 Discovery/Authority/Conversion 的下一步排序；建立真实北极星时延、到期 Outcome、独立样本与 repeat/alter/stop Playbook；完善小白对话引导 | P0 | 进行中 | v0.2-rc 修复后开始；Growth Loop 已能处理普通 Signal 与到期 Outcome | 实现 Planner、指标和证据约束，完成端到端回归与 v0.3 发布说明 |
+| NX-028 | v0.2-rc 稳定化 | 修复 Signal 路径碰撞、Windows 锁探测、Outcome 时间与审计语义、跨账号投影、Reply 队列、收藏完整快照、独立安装依赖与升级路径 | P0 | 已完成 | `v0.3.0-alpha.1` 已发布；Signal 迁移、核心 fallback、隔离 venv 安装、升级缓存与 138 项回归均已验证 | 进入 NX-B02 的真实三端 Agent 验收 |
+| NX-029 | v0.3 决策系统 | 让 Growth Strategy 驱动 Discovery/Authority/Conversion 的下一步排序；建立可计算北极星时延、到期 Outcome、证据/反例约束的 repeat/alter/stop Playbook；完善小白对话引导 | P0 | 已完成 | Growth Planner、到期窗口、`do Decision → Artifact` 中位时延、Playbook 证据/反例、渐进问题与端到端测试已随 `v0.3.0-alpha.1` 发布 | 用真实运营样本校正指标阈值与推荐质量 |
 
 ## 受阻
 
 | ID | 模块 | 任务 | 优先级 | 状态 | 验收或证据 | 下一步 |
 | --- | --- | --- | --- | --- | --- | --- |
 | NX-B01 | Bookmarks 运行环境 | 真实 X Bookmark smoke 与 dry-run | P0 | 受阻 | twitter-cli 已安装，但当前报错 `Twitter cookie extraction failed`；测试夹具链路正常 | 重新认证 twitter-cli；以 `nextx doctor` 和 `collect --source bookmarks --limit 1 --dry-run` 均成功作为解除条件 |
+| NX-B02 | 真实 Agent 验收 | 在 Codex、Claude Code、Grok Build 三端各跑一次“初始化 NextX → Self/Strategy → Signal → Decision → Artifact”的真实新会话黄金路径 | P0 | 受阻 | 安装器已检测到三端并部署 canonical Skill；自动化覆盖安装、路径和预检，不替代真实会话 | 需要三端实际可用会话与用户确认；不阻塞公开 Alpha，但阻塞“已验证三端运营体验”的声明 |
 
 ## 待办
 
@@ -90,3 +91,4 @@
 | 2026-08-08 | NX-026 | 完成起号 Quote Sprint | 新增 Quote Collector Prompt、带原帖/作者/窗口校验的候选 Signal、最多三条的 View、受限 Quote Decision/Artifact、QT 写作交接、人工可见性观察与完整回归覆盖 |
 | 2026-08-08 | NX-027 | 完成 v0.2 Growth Loop | 增加用户确认的增长策略、Growth Contract、Reply 候选/时效队列、Reply 锁定草稿、Thread Pack 与资产清单、发布后行动、1h/24h/7d 反馈、三样本 Playbook 门槛、Growth Loop View 与端到端测试 |
 | 2026-08-09 | NX-028、NX-029 | 启动 v0.2-rc → v0.3 版本目标 | 先收口审查发现的数据完整性、安装与运行断点，再让策略、指标与学习真正驱动下一步行动；外部账号认证和连续运营验证仍独立记录 |
+| 2026-08-09 | NX-028、NX-029 | 发布 v0.3.0 Alpha 1 | commit `48937e1`、tag `v0.3.0-alpha.1` 已推送；138 项测试、编译、Skill 校验、隔离安装和安装器 dry-run 通过 |
