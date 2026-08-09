@@ -782,9 +782,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--json", action="store_const", const="json", dest="output")
     try:
         if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+            sys.stdout.reconfigure(errors="backslashreplace")
         if hasattr(sys.stderr, "reconfigure"):
-            sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+            sys.stderr.reconfigure(errors="backslashreplace")
         _reexec_with_supported_python()
         arguments = parser.parse_args(argv)
         source = _source_root(arguments.source)
@@ -802,14 +802,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         if arguments.output == "human":
             print(_human_output(result))
         else:
-            print(json.dumps(result, ensure_ascii=False))
+            print(json.dumps(result, ensure_ascii=True))
         return 0
     except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         output = arguments.output if "arguments" in locals() else "json"
         if output == "human":
             print(f"NextX installer failed: {error}", file=sys.stderr)
         else:
-            print(json.dumps({"ok": False, "command": "bootstrap", "error": str(error)}, ensure_ascii=False))
+            print(json.dumps({"ok": False, "command": "bootstrap", "error": str(error)}, ensure_ascii=True))
         return 1
 
 
