@@ -49,11 +49,7 @@ class TopicCardTests(unittest.TestCase):
     def test_topic_brief_treats_cluster_metadata_as_untrusted_too(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
-            cluster_id = self._cluster(vault)
-            snapshot_path = vault / ".nextx" / "clusters.json"
-            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
-            snapshot["clusters"][0]["display_title"] = "First raw source"
-            snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
+            cluster_id = self._cluster(vault, display_title="First raw source")
 
             brief = build_topic_brief(vault, cluster_id)["brief"]
             positions = [index for index in range(len(brief)) if brief.startswith("First raw source", index)]
@@ -77,10 +73,36 @@ class TopicCardTests(unittest.TestCase):
             snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
             forged_id = snapshot["clusters"][0]["cluster_id"]
 
-            with self.assertRaisesRegex(ValueError, "current"):
+            with self.assertRaisesRegex(ValueError, "integrity"):
                 build_topic_brief(vault, forged_id)
-            with self.assertRaisesRegex(ValueError, "current"):
+            with self.assertRaisesRegex(ValueError, "integrity"):
                 save_topic(vault, self._payload(forged_id), now=NOW)
+
+    def test_self_consistent_cluster_member_swap_cannot_be_promoted(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            self._cluster(vault, ready_third=True)
+            snapshot_path = vault / ".nextx" / "clusters.json"
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            cluster = snapshot["clusters"][0]
+            members = ["x:101", "x:103"]
+            cluster["signal_ids"] = members
+            cluster["cluster_id"] = "cluster:" + hashlib.sha256(
+                "\n".join([snapshot["cluster_run_id"], *sorted(members)]).encode("utf-8")
+            ).hexdigest()[:16]
+            cluster["source_links"] = [
+                {"signal_id": "x:101", "url": "https://x.com/one/status/101"},
+                {"signal_id": "x:103", "url": "https://x.com/three/status/103"},
+            ]
+            cluster["content_key"] = "x:101\nx:103"
+            cluster["source_key"] = "https://x.com/one/status/101\none\nhttps://x.com/three/status/103\nthree"
+            cluster["evidence"][1] = {"signal_id": "x:103", "quote": "unrelated signal text", "role": "counter", "translation_status": "original"}
+            snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "integrity"):
+                build_topic_brief(vault, cluster["cluster_id"])
+            with self.assertRaisesRegex(ValueError, "integrity"):
+                save_topic(vault, self._payload(cluster["cluster_id"]), now=NOW)
 
     def test_failed_current_cluster_run_cannot_build_or_save_a_topic(self):
         with TemporaryDirectory() as tmp:
@@ -227,11 +249,16 @@ class TopicCardTests(unittest.TestCase):
             "notes": "Explicitly promoted after review.",
         }
 
-    def _cluster(self, vault: Path) -> str:
+    def _cluster(self, vault: Path, *, ready_third: bool = False, display_title: str | None = None) -> str:
         self._ingest(vault)
         self._ready(vault, "x:101")
         self._ready(vault, "x:102")
-        result = save_clusters(vault, self._cluster_payload(build_cluster_brief(vault, now=NOW)), now=NOW)
+        if ready_third:
+            self._ready(vault, "x:103")
+        payload = self._cluster_payload(build_cluster_brief(vault, now=NOW))
+        if display_title is not None:
+            payload["clusters"][0]["display_title"] = display_title
+        result = save_clusters(vault, payload, now=NOW)
         return json.loads((vault / ".nextx" / "clusters.json").read_text(encoding="utf-8"))["clusters"][0]["cluster_id"]
 
     def _cluster_payload(self, brief: dict[str, object]) -> dict[str, object]:

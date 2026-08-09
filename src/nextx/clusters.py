@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import hashlib
+import hmac
 import json
+import secrets
 from pathlib import Path
 import re
 
@@ -154,6 +156,42 @@ def cluster_path(vault: Path) -> Path:
     return vault / ".nextx" / "clusters.json"
 
 
+def _integrity_key_path(vault: Path) -> Path:
+    return vault / ".nextx" / "cluster-integrity.key"
+
+
+def _integrity_key(vault: Path, *, create: bool) -> bytes | None:
+    path = _integrity_key_path(vault)
+    try:
+        key = bytes.fromhex(path.read_text(encoding="utf-8").strip())
+    except OSError:
+        key = b""
+    except ValueError:
+        return None
+    if len(key) == 32:
+        return key
+    if not create:
+        return None
+    key = secrets.token_bytes(32)
+    atomic_write_text(path, key.hex() + "\n")
+    return key
+
+
+def _snapshot_integrity(key: bytes, snapshot: dict[str, object]) -> str:
+    payload = {name: value for name, value in snapshot.items() if name != "integrity"}
+    material = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hmac.new(key, material, hashlib.sha256).hexdigest()
+
+
+def cluster_snapshot_is_intact(vault: Path, snapshot: dict[str, object]) -> bool:
+    """Verify a locally keyed write binding; never accept a recomputable checksum."""
+    key = _integrity_key(vault, create=False)
+    signature = snapshot.get("integrity")
+    return isinstance(signature, str) and key is not None and hmac.compare_digest(
+        signature, _snapshot_integrity(key, snapshot)
+    )
+
+
 def _cluster_id(cluster_run_id: str, signal_ids: list[str]) -> str:
     material = "\n".join((cluster_run_id, *sorted(signal_ids))).encode("utf-8")
     return f"cluster:{hashlib.sha256(material).hexdigest()[:16]}"
@@ -265,6 +303,9 @@ def save_clusters(vault: Path, payload: object, *, now: datetime | None = None) 
     history_path = vault / ".nextx" / "topic-cluster-history.json"
     with vault_lock(vault):
         init_vault(vault)
+        key = _integrity_key(vault, create=True)
+        assert key is not None
+        snapshot["integrity"] = _snapshot_integrity(key, snapshot)
         history = _load_json(history_path, {"schema_version": CLUSTER_VERSION, "clusters": {}})
         history["schema_version"] = CLUSTER_VERSION
         historical = history.setdefault("clusters", {})

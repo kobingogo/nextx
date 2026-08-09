@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 
 from .briefs import untrusted_data_block
-from .clusters import MAX_CLUSTER_SIGNALS, build_cluster_brief, cluster_path, eligible_cluster_records
+from .clusters import MAX_CLUSTER_SIGNALS, build_cluster_brief, cluster_path, cluster_snapshot_is_intact, eligible_cluster_records
 from .contracts import contracts_root
 from .naming import safe_filename_component
 from .records import read_frontmatter
@@ -87,6 +87,8 @@ def _current_cluster(vault: Path, cluster_id: str) -> tuple[dict[str, object], d
         or snapshot.get("strategy_snapshot_id") != strategy_snapshot_id(vault)
     ):
         raise ValueError("Topic Cluster is not current")
+    if not cluster_snapshot_is_intact(vault, snapshot):
+        raise ValueError("Topic Cluster integrity check failed")
     status = _load_json(vault / ".nextx" / "cluster-status.json")
     if status.get("cluster_run_id") == snapshot["cluster_run_id"] and status.get("status") == "failed":
         raise ValueError("Current Topic Cluster run failed")
