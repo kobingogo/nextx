@@ -54,6 +54,41 @@ class SignalTests(unittest.TestCase):
             self.assertEqual(report.created, 0)
             self.assertEqual(report.duplicates, 2)
 
+    def test_duplicate_identity_skips_hostile_filename_metadata(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            original = {
+                "schema_version": 1,
+                "account_key": "primary",
+                "collector": "file-import",
+                "retrieved_at": NOW.isoformat(),
+                "items": [
+                    {
+                        "source_id": "feed:duplicate",
+                        "platform": "rss",
+                        "text": "A stable identity already exists.",
+                        "source_confidence": "high",
+                    }
+                ],
+            }
+            duplicate = {
+                **original,
+                "items": [
+                    {
+                        **original["items"][0],
+                        "platform": "网" * 64,
+                        "author_handle": "作" * 64,
+                    }
+                ],
+            }
+            ingest_signals(vault, original, collector="file-import", now=NOW)
+
+            report = ingest_signals(vault, duplicate, collector="file-import", now=NOW)
+
+            self.assertEqual(report.created, 0)
+            self.assertEqual(report.duplicates, 1)
+            self.assertEqual(len(list((vault / "01. Signal").glob("*.md"))), 1)
+
     def test_distinct_non_x_ids_that_share_a_slug_keep_distinct_records(self):
         """A filesystem-safe name must never merge two valid source identities."""
         with TemporaryDirectory() as tmp:

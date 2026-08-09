@@ -576,6 +576,8 @@ def ingest_signals(
                 exists = True
             except FileNotFoundError:
                 exists = False
+            if signal.id in written or exists:
+                continue
             display_title = signal_display_title(signal.text)
             observed_at = signal.published_at or signal.retrieved_at or timestamp.isoformat()
             target = vault / "01. Signal" / human_signal_filename(
@@ -585,8 +587,6 @@ def ingest_signals(
                 observed_at=observed_at,
                 display_title=display_title,
             )
-            if signal.id in written or exists:
-                continue
             if target.exists():
                 raise ValueError(
                     f"Signal filename collision at {target}; refusing to overwrite an unrelated record"
