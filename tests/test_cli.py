@@ -135,6 +135,24 @@ class CLITests(unittest.TestCase):
             self.assertEqual(saved["command"], "save-topic")
             self.assertTrue(Path(saved["path"]).is_file())
 
+    def test_topic_decision_brief_persists_an_original_topic_handoff(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            self._make_topic_cluster(vault)
+            cluster_id = json.loads((vault / ".nextx" / "clusters.json").read_text(encoding="utf-8"))["clusters"][0]["cluster_id"]
+            input_path = vault / "topic.json"
+            input_path.write_text(json.dumps(self._topic_payload(cluster_id)), encoding="utf-8")
+            _, saved_stdout, _ = run_cli(["save-topic", "--vault", tmp, "--input-json", str(input_path)])
+            topic_id = json.loads(saved_stdout)["id"]
+
+            code, stdout, stderr = run_cli(["topic-decision-brief", "--vault", tmp, topic_id])
+
+            self.assertEqual((code, stderr), (0, ""))
+            result = json.loads(stdout)
+            self.assertEqual(result["topic_id"], topic_id)
+            self.assertEqual(result["signal_ids"], ["x:801", "x:802"])
+            self.assertTrue(Path(result["handoff_path"]).is_file())
+
     def test_argument_errors_are_structured_json(self):
         code, stdout, stderr = run_cli(["not-a-command"])
 

@@ -67,6 +67,50 @@ def decision_payload(verdict="do"):
 
 
 class DecisionTests(unittest.TestCase):
+    def test_topic_link_requires_active_original_card_and_exact_members(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            setup_vault(vault)
+            topic_id = "topic:0123456789abcdef"
+            topic_path = vault / "01. Topic" / "topic.md"
+            topic_path.parent.mkdir(exist_ok=True)
+            topic_path.write_text(
+                "---\n"
+                f"id: {json.dumps(topic_id)}\n"
+                'type: "topic"\n'
+                'status: "active"\n'
+                'suggested_mode: "original"\n'
+                'signal_ids: ["x:3001","x:3002"]\n'
+                "---\n",
+                encoding="utf-8",
+            )
+            payload = decision_payload()
+            payload.update({"topic_id": topic_id, "signal_ids": ["x:3001", "x:3002"]})
+
+            result = save_decision(vault, payload, now=NOW)
+
+            properties, _ = read_frontmatter(Path(result["path"]))
+            self.assertEqual(result["topic_id"], topic_id)
+            self.assertEqual(properties["topic_id"], topic_id)
+
+            update_frontmatter(topic_path, {"status": "parked"})
+            with self.assertRaisesRegex(ValueError, "active"):
+                save_decision(vault, payload, now=NOW)
+
+            update_frontmatter(topic_path, {"status": "active", "suggested_mode": "quote"})
+            with self.assertRaisesRegex(ValueError, "original"):
+                save_decision(vault, payload, now=NOW)
+
+            update_frontmatter(topic_path, {"suggested_mode": "original"})
+            mismatched = decision_payload()
+            mismatched.update({"topic_id": topic_id, "signal_ids": ["x:3001"]})
+            with self.assertRaisesRegex(ValueError, "Topic"):
+                save_decision(vault, mismatched, now=NOW)
+
+            quote = decision_payload()
+            quote.update({"topic_id": topic_id, "execution_mode": "quote"})
+            with self.assertRaisesRegex(ValueError, "original"):
+                save_decision(vault, quote, now=NOW)
     def test_bookmark_signal_can_be_used_as_exact_evidence_for_do_decision(self):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
@@ -151,6 +195,18 @@ class DecisionTests(unittest.TestCase):
             self.assertIn("A verifiable trend signal.", result["brief"])
             self.assertIn("Profile.md", result["brief"])
             self.assertNotIn("# Profile\n", result["brief"])
+
+    def test_original_decision_brief_keeps_its_single_signal_public_shape(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            setup_vault(vault)
+
+            result = decision_brief(vault, "x:3001")
+
+            self.assertEqual(
+                set(result),
+                {"schema_version", "ok", "command", "execution_mode", "signal_path", "brief"},
+            )
 
     def test_identical_agent_retry_reuses_decision_even_at_the_same_timestamp(self):
         with TemporaryDirectory() as tmp:

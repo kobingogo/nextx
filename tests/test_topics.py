@@ -10,7 +10,13 @@ import unittest
 from nextx.clusters import build_cluster_brief, save_clusters
 from nextx.records import update_frontmatter
 from nextx.signals import ingest_signals, signal_path
-from nextx.topics import build_topic_brief, read_topic, save_topic, topic_path
+from nextx.topics import (
+    build_topic_brief,
+    read_topic,
+    save_topic,
+    topic_decision_brief,
+    topic_path,
+)
 from nextx.triage import save_triage
 
 
@@ -193,6 +199,20 @@ class TopicCardTests(unittest.TestCase):
             self.assertEqual(path.parent, vault.resolve() / "01. Topic")
             self.assertNotIn("/", path.name)
             self.assertNotIn("..", path.name)
+
+    def test_topic_decision_brief_uses_all_active_original_card_signals(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            cluster_id = self._cluster(vault)
+            created = save_topic(vault, self._payload(cluster_id), now=NOW)
+
+            result = topic_decision_brief(vault, created["id"])
+
+            self.assertEqual(result["topic_id"], created["id"])
+            self.assertEqual(result["signal_ids"], ["x:101", "x:102"])
+            self.assertIn("First raw source", result["brief"])
+            self.assertIn("Second raw source", result["brief"])
+            self.assertIn(created["id"], result["brief"])
 
     def _payload(self, cluster_id: str) -> dict[str, object]:
         return {

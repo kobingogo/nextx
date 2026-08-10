@@ -511,6 +511,30 @@ def read_topic(vault: Path, topic_id: str) -> tuple[Path, dict[str, object], str
     return path, properties, body
 
 
+def topic_decision_brief(vault: Path, topic_id: str) -> dict[str, object]:
+    """Prepare one active original Topic Card for the Decision gate."""
+    vault = vault.expanduser().resolve()
+    _, topic, _ = read_topic(vault, topic_id)
+    if topic.get("status") != "active":
+        raise ValueError("Topic Card must be active")
+    if topic.get("suggested_mode") != "original":
+        raise ValueError("Topic Card must use suggested_mode='original'")
+    signal_ids = topic.get("signal_ids")
+    if (
+        not isinstance(signal_ids, list)
+        or not signal_ids
+        or any(not isinstance(signal_id, str) or not signal_id for signal_id in signal_ids)
+        or len(set(signal_ids)) != len(signal_ids)
+    ):
+        raise ValueError("Topic Card has invalid signal_ids")
+    from .decisions import decision_brief_for_signals
+
+    return {
+        **decision_brief_for_signals(vault, list(signal_ids), topic_id=topic_id),
+        "command": "topic-decision-brief",
+    }
+
+
 def render_topic_cards(vault: Path, *, now: datetime | None = None) -> dict[str, object]:
     """Rebuild the disposable Topic Card View without changing any Topic Card."""
     vault = vault.expanduser().resolve()

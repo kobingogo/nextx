@@ -20,7 +20,7 @@ from .bookmarks import (
     write_bookmark_health,
 )
 from .clusters import build_cluster_brief, record_cluster_failure, render_topic_clusters, save_clusters
-from .topics import build_topic_brief, save_topic
+from .topics import build_topic_brief, save_topic, topic_decision_brief
 from .accounts import account_status
 from .analysis import build_analysis_brief, save_analysis
 from .artifacts import (
@@ -204,6 +204,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     _add_vault_argument(brief)
     brief.add_argument("signal_id")
+
+    topic_decision = subparsers.add_parser(
+        "topic-decision-brief", help="Prepare one active original Topic Card for topic-engine"
+    )
+    _add_vault_argument(topic_decision)
+    topic_decision.add_argument("topic_id")
 
     quote_brief = subparsers.add_parser(
         "quote-brief", help="Prepare a Quote candidate Signal for topic-engine"
@@ -700,6 +706,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             vault = resolve_vault(arguments.vault)
             result = _persist_handoff(
                 vault, "decision", arguments.signal_id, decision_brief(vault, arguments.signal_id)
+            )
+            code = 0
+        elif arguments.command == "topic-decision-brief":
+            vault = resolve_vault(arguments.vault)
+            result = _persist_handoff(
+                vault,
+                "topic-decision",
+                arguments.topic_id,
+                topic_decision_brief(vault, arguments.topic_id),
             )
             code = 0
         elif arguments.command == "quote-brief":

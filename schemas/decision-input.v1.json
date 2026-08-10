@@ -9,6 +9,7 @@
     "account_key": {"const": "primary"},
     "verdict": {"enum": ["do", "defer", "kill"]},
     "execution_mode": {"enum": ["original", "quote", "reply"]},
+    "topic_id": {"type": ["string", "null"], "pattern": "^topic:[0-9a-f]{16}$"},
     "signal_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
     "reason_code": {"type": "string", "minLength": 1},
     "reason": {"type": "string", "minLength": 1},
