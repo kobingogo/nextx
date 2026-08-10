@@ -50,8 +50,11 @@ def _validate_envelope(payload: object) -> dict[str, object]:
 
 
 def _signal_path(vault: Path, signal_id: str) -> Path:
-    normalized = f"x:{signal_id}" if signal_id.isdigit() else signal_id
-    return signal_path(vault, normalized)
+    return signal_path(vault, _canonical_signal_id(signal_id))
+
+
+def _canonical_signal_id(signal_id: str) -> str:
+    return f"x:{signal_id}" if signal_id.isdigit() else signal_id
 
 
 def _utc_now(now: datetime | None) -> datetime:
@@ -453,7 +456,8 @@ def save_decision(
     if not isinstance(signal_ids, list) or not signal_ids:
         raise ValueError("Decision signal_ids must be a non-empty list")
     normalized_signal_ids = [
-        _required_string({"value": value}, "value") for value in signal_ids
+        _canonical_signal_id(_required_string({"value": value}, "value"))
+        for value in signal_ids
     ]
     if len(set(normalized_signal_ids)) != len(normalized_signal_ids):
         raise ValueError("Decision signal_ids must not contain duplicates")

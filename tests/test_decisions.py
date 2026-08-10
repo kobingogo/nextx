@@ -93,6 +93,14 @@ class DecisionTests(unittest.TestCase):
             self.assertEqual(result["topic_id"], topic_id)
             self.assertEqual(properties["topic_id"], topic_id)
 
+            bare_ids = decision_payload()
+            bare_ids.update({"topic_id": topic_id, "signal_ids": ["3001", "3002"]})
+            bare_result = save_decision(vault, bare_ids, now=NOW)
+            bare_properties, _ = read_frontmatter(Path(bare_result["path"]))
+            self.assertEqual(bare_result["topic_id"], topic_id)
+            self.assertEqual(bare_result["signal_ids"], ["x:3001", "x:3002"])
+            self.assertEqual(bare_properties["signal_ids"], ["x:3001", "x:3002"])
+
             update_frontmatter(topic_path, {"status": "parked"})
             with self.assertRaisesRegex(ValueError, "active"):
                 save_decision(vault, payload, now=NOW)
