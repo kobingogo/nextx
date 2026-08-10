@@ -144,6 +144,26 @@ class ClusterBriefTests(unittest.TestCase):
             self.assertEqual(view["status"], "failed")
             self.assertIn("Last save failed", Path(view["view"]).read_text(encoding="utf-8"))
 
+    def test_integrity_invalid_current_snapshot_is_not_rendered_as_validated(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            self._ingest(vault)
+            self._save_ready(vault, "x:101")
+            self._save_ready(vault, "x:102")
+            save_clusters(vault, self._payload(build_cluster_brief(vault, now=NOW)), now=NOW)
+            snapshot_path = vault / ".nextx" / "clusters.json"
+            snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            snapshot["clusters"][0]["display_title"] = "Forged validated Cluster"
+            snapshot_path.write_text(json.dumps(snapshot), encoding="utf-8")
+
+            view = render_topic_clusters(vault, now=NOW)
+            text = Path(view["view"]).read_text(encoding="utf-8")
+
+            self.assertEqual(view["status"], "unavailable")
+            self.assertEqual(view["cluster_count"], 0)
+            self.assertNotIn("Forged validated Cluster", text)
+            self.assertIn("No current validated cluster projection", text)
+
     def _payload(self, brief: dict[str, object]) -> dict[str, object]:
         return {
             "schema_version": 1,

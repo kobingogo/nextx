@@ -338,7 +338,11 @@ def render_topic_clusters(vault: Path, *, now: datetime | None = None, failure: 
     snapshot = _load_json(cluster_path(vault), {})
     failure_state = _load_json(vault / ".nextx" / "cluster-status.json", {})
     current = build_cluster_brief(vault, now=now)
-    valid = snapshot.get("cluster_run_id") == current["cluster_run_id"] and snapshot.get("strategy_snapshot_id") == current["strategy_snapshot_id"]
+    valid = (
+        snapshot.get("cluster_run_id") == current["cluster_run_id"]
+        and snapshot.get("strategy_snapshot_id") == current["strategy_snapshot_id"]
+        and cluster_snapshot_is_intact(vault, snapshot)
+    )
     clusters = snapshot.get("clusters") if valid and isinstance(snapshot.get("clusters"), list) else []
     failed = failure or (failure_state.get("last_failure") if failure_state.get("cluster_run_id") == current["cluster_run_id"] else None)
     status = "failed" if failed else "ready" if valid else "unavailable"
