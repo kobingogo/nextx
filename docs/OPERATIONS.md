@@ -440,6 +440,12 @@ Today 只保留最多 10 条自动候选和 2 条手动候选；自动候选按 
 04. Views/Decision Board.md
 ```
 
+### 已保存 Signals 的主题链路
+
+当用户明确要求整理多条已保存 Signal 时，先运行只读的 `cluster-brief`，查看临时 Cluster Brief；它不会创建 Topic Card。只有当前请求明确要求保存时，才用 `save-clusters` 保存 Cluster projection 到 `.nextx/clusters.json`，并查看 `04. Views/Topics/Topic Clusters.md`。随后可对一个选定 Cluster 运行 `topic-brief CLUSTER_ID`；只有用户明确要求时，才用 `save-topic` 在 `01. Topic/` 创建一张 Topic Card，并查看 `04. Views/Topics/Topic Cards.md`。
+
+原创 Topic Card 仍须运行 `topic-decision-brief TOPIC_ID` 并保存原创建 Decision，才可进入 Artifact 流程。Topic Card 从不授权发布。Quote 和 Reply 不经过这条多 Signal 链路，继续使用原有的单 Signal Candidate 与决策窗口。
+
 ### 第四步：生成草稿
 
 只对 `do` Decision 执行：

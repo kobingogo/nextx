@@ -153,6 +153,68 @@ class CLITests(unittest.TestCase):
             self.assertEqual(result["signal_ids"], ["x:801", "x:802"])
             self.assertTrue(Path(result["handoff_path"]).is_file())
 
+    def test_topic_foundation_cli_flow_stays_local_and_requires_no_artifact(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            now = datetime.now(timezone.utc).replace(microsecond=0)
+            ingest_signals(
+                vault,
+                {"schema_version": 1, "account_key": "primary", "collector": "grok-build", "retrieved_at": now.isoformat(), "items": [
+                    {"source_id": "x:801", "platform": "x", "source_url": "https://x.com/one/status/801", "author_handle": "one", "published_at": now.isoformat(), "text": "First CLI source", "source_confidence": "high"},
+                    {"source_id": "x:802", "platform": "x", "source_url": "https://x.com/two/status/802", "author_handle": "two", "published_at": now.isoformat(), "text": "Second CLI source", "source_confidence": "high"},
+                ]},
+                collector="grok-build",
+                now=now,
+            )
+            for signal_id in ("x:801", "x:802"):
+                save_triage(vault, {
+                    "schema_version": 1, "account_key": "primary", "signal_id": signal_id, "display_title": "Ready CLI Signal", "language": "en", "content_lane": "builder_core", "topic_labels": ["AI"], "triage_status": "ready", "recommended_action": "topic", "triage_factors": {"reader_fit": 5, "evidence": 5, "value_add": 5, "urgency": 5}, "triage_confidence": "high", "summary": "Ready.", "target_reader": "Builders", "why_relevant": "Relevant.", "value_add": "Useful.", "risk": "Small sample.", "deep_dive": False, "reason_codes": ["fit"],
+                }, now=now)
+
+            brief_code, brief_stdout, brief_stderr = run_cli(["cluster-brief", "--vault", tmp])
+            self.assertEqual((brief_code, brief_stderr), (0, ""))
+            cluster_payload = {
+                "schema_version": 1, "account_key": "primary", "cluster_run_id": json.loads(brief_stdout)["cluster_run_id"],
+                "clusters": [{"kind": "evergreen", "signal_ids": ["x:801", "x:802"], "display_title": "CLI workflows", "proposition": "Systems beat tricks.", "confidence": "high", "why_now": "Recent.", "target_reader": "Builders", "candidate_angle": "Systems.", "recommended_next_step": "topic_card", "evidence": [{"signal_id": "x:801", "quote": "First CLI source", "role": "support", "translation_status": "original"}, {"signal_id": "x:802", "quote": "Second CLI source", "role": "counter", "translation_status": "original"}]}], "adjacent_candidates": [],
+            }
+            cluster_input = vault / "cluster.json"
+            cluster_input.write_text(json.dumps(cluster_payload), encoding="utf-8")
+            save_cluster_code, save_cluster_stdout, save_cluster_stderr = run_cli(["save-clusters", "--vault", tmp, "--input-json", str(cluster_input)])
+            self.assertEqual((save_cluster_code, save_cluster_stderr), (0, ""))
+            self.assertEqual(json.loads(save_cluster_stdout)["saved"], 1)
+            cluster_id = json.loads((vault / ".nextx" / "clusters.json").read_text(encoding="utf-8"))["clusters"][0]["cluster_id"]
+
+            topic_brief_code, _, topic_brief_stderr = run_cli(["topic-brief", "--vault", tmp, cluster_id])
+            self.assertEqual((topic_brief_code, topic_brief_stderr), (0, ""))
+            topic_input = vault / "topic.json"
+            topic_input.write_text(json.dumps(self._topic_payload(cluster_id)), encoding="utf-8")
+            save_topic_code, save_topic_stdout, save_topic_stderr = run_cli(["save-topic", "--vault", tmp, "--input-json", str(topic_input)])
+            self.assertEqual((save_topic_code, save_topic_stderr), (0, ""))
+            topic_id = json.loads(save_topic_stdout)["id"]
+
+            decision_brief_code, _, decision_brief_stderr = run_cli(["topic-decision-brief", "--vault", tmp, topic_id])
+            self.assertEqual((decision_brief_code, decision_brief_stderr), (0, ""))
+            decision_payload = json.loads(DECISION_FIXTURE.read_text(encoding="utf-8"))
+            decision_payload.update({
+                "topic_id": topic_id,
+                "signal_ids": ["x:801", "x:802"],
+                "evidence": [
+                    {"signal_id": "x:801", "quote": "First CLI source", "source_url": "https://x.com/one/status/801"},
+                    {"signal_id": "x:802", "quote": "Second CLI source", "source_url": "https://x.com/two/status/802"},
+                ],
+                "growth_contract": {**decision_payload["growth_contract"], "review_at": (now + timedelta(days=4)).isoformat()},
+            })
+            decision_input = vault / "decision.json"
+            decision_input.write_text(json.dumps(decision_payload), encoding="utf-8")
+            save_decision_code, save_decision_stdout, save_decision_stderr = run_cli(["save-decision", "--vault", tmp, "--input-json", str(decision_input)])
+
+            self.assertEqual((save_decision_code, save_decision_stderr), (0, ""))
+            self.assertEqual(json.loads(save_decision_stdout)["topic_id"], topic_id)
+            self.assertEqual(len(list((vault / "01. Topic").glob("*.md"))), 1)
+            self.assertTrue((vault / "04. Views" / "Topics" / "Topic Clusters.md").is_file())
+            self.assertTrue((vault / "04. Views" / "Topics" / "Topic Cards.md").is_file())
+            self.assertEqual(list((vault / "03. Artifact").glob("*.md")), [])
+
     def test_argument_errors_are_structured_json(self):
         code, stdout, stderr = run_cli(["not-a-command"])
 

@@ -148,6 +148,12 @@ NextX 不会直接“调用模型 API”。它生成受控 Brief、提供 JSON �
 
 写完整长贴时，直接对 Agent 说“将这个 do Decision 做成 Thread，并准备配图清单”。NextX 会要求保存 `thread_pack`（逐条 Thread 与 CTA）和 `asset_manifest`（配图用途、提示词、alt text、可选本地文件），再交给 `content-infographic` 或其他图片 Skill 制作。它不会把“有图片提示词”误报为“图片已生成”。
 
+### 多条 Signal 形成一个原创主题
+
+当你想把多条已经保存并完成 Triage 的 Signal 整理成一个主题时，对 Agent 说“整理这些已保存 Signals”。它先给出只读的 Cluster Brief，不会写入 Topic Card。若你确认保存 Cluster，再明确说“保存这个 Cluster”；若要长期保留其中一个方向，再明确说“创建这个 Topic Card”。卡片会出现在 `01. Topic/`，Cluster 与卡片视图在 `04. Views/Topics/`。
+
+一张原创 Topic Card 仍必须经过 Topic Decision，才可以写草稿；它不授权发布。Quote 和 Reply 仍是各自的单帖路径，不会被多 Signal 主题流程替代。
+
 ## 5. 三种采集方式
 
 ### 手动素材：最稳，随时可用
