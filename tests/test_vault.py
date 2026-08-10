@@ -15,6 +15,7 @@ class VaultTests(unittest.TestCase):
 
             self.assertTrue((vault / "00. Self").is_dir())
             self.assertTrue((vault / "01. Signal").is_dir())
+            self.assertTrue((vault / "01. Topic").is_dir())
             self.assertTrue((vault / "02. Decision").is_dir())
             self.assertTrue((vault / "03. Artifact").is_dir())
             self.assertTrue((vault / "04. Views").is_dir())

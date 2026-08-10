@@ -50,8 +50,11 @@ def _validate_envelope(payload: object) -> dict[str, object]:
 
 
 def _signal_path(vault: Path, signal_id: str) -> Path:
-    normalized = f"x:{signal_id}" if signal_id.isdigit() else signal_id
-    return signal_path(vault, normalized)
+    return signal_path(vault, _canonical_signal_id(signal_id))
+
+
+def _canonical_signal_id(signal_id: str) -> str:
+    return f"x:{signal_id}" if signal_id.isdigit() else signal_id
 
 
 def _utc_now(now: datetime | None) -> datetime:
@@ -290,6 +293,74 @@ def _source_text(body: str) -> str:
     return match.group("text").strip()
 
 
+def decision_brief_for_signals(
+    vault: Path, signal_ids: list[str], *, topic_id: str | None = None
+) -> dict[str, object]:
+    """Build the original-mode Decision handoff for explicit Signal evidence."""
+    if not isinstance(signal_ids, list) or not signal_ids:
+        raise ValueError("Decision signal_ids must be a non-empty list")
+    normalized_signal_ids = [_required_string({"value": value}, "value") for value in signal_ids]
+    if len(set(normalized_signal_ids)) != len(normalized_signal_ids):
+        raise ValueError("Decision signal_ids must not contain duplicates")
+    if topic_id is not None:
+        topic_id = _required_string({"value": topic_id}, "value")
+
+    vault = vault.expanduser().resolve()
+    signals = [(_signal_path(vault, signal_id), signal_id) for signal_id in normalized_signal_ids]
+    self_paths = [
+        vault / "00. Self" / name
+        for name in (
+            "Profile.md",
+            "Voice.md",
+            "Pillars.md",
+            "Monitoring.md",
+            "Growth Strategy.md",
+            "Playbook.md",
+        )
+    ]
+    path_list = "\n".join(f"- {path}" for path in self_paths)
+    topic_requirement = (
+        ""
+        if topic_id is None
+        else (
+            f"\n这份 Topic Card 的 ID 是 {_json(topic_id)}。Decision JSON 必须原样包含 "
+            f"\"topic_id\": {_json(topic_id)}，并保留以下全部 Signal IDs；"
+            "不得改成 Quote 或 Reply。\n"
+        )
+    )
+    signal_blocks = "\n\n".join(
+        untrusted_data_block("Signal", path.read_text(encoding="utf-8")) for path, _ in signals
+    )
+    brief = f"""使用现有 topic-engine 对明确选中的 Signal 做原创选题裁决。
+
+只在需要判断定位时读取这些 Self 文件，不要在输出中复制整库内容：
+{path_list}
+
+输出一个 schema_version=1、account_key=primary 的 Decision JSON。verdict 只能是 do、defer、kill。
+
+do 必须提供：angle、evidence_sufficient=true、evidence、original_value、risk、recommended_format、research_summary、why_now、why_self、reason_code、reason，以及 growth_contract。growth_contract 必须含 objective（awareness / authority / conversion）、target_reader、expected_action、distribution_target、review_at（未来带时区）。这是一次对读者行为的假设，不得承诺效果。
+evidence 必须是数组；每项含 signal_id、quote 和 source_url（手动 Signal 的 source_url 可为 null）。quote 必须是所选 Signal 中逐字可见的短摘录，不要编造或改写。
+defer 必须提供 reason_code、reason、revisit_at（未来且带时区）和 revisit_reason；kill 只需 reason_code 和 reason。不要写推文正文。
+如果不是 Quote / Reply Sprint，execution_mode 可省略（默认 original）。{topic_requirement}
+
+{signal_blocks}
+"""
+    result: dict[str, object] = {
+        "schema_version": 1,
+        "ok": True,
+        "command": "decision-brief",
+        "execution_mode": "original",
+        "signal_ids": normalized_signal_ids,
+        "signal_paths": [str(path) for path, _ in signals],
+        "brief": brief,
+    }
+    if len(signals) == 1:
+        result["signal_path"] = str(signals[0][0])
+    if topic_id is not None:
+        result["topic_id"] = topic_id
+    return result
+
+
 def decision_brief(
     vault: Path,
     signal_id: str,
@@ -300,6 +371,16 @@ def decision_brief(
     vault = vault.expanduser().resolve()
     if execution_mode not in EXECUTION_MODES:
         raise ValueError("Decision execution_mode must be original, quote, or reply")
+    if execution_mode == "original":
+        result = decision_brief_for_signals(vault, [signal_id])
+        return {
+            "schema_version": 1,
+            "ok": True,
+            "command": "decision-brief",
+            "execution_mode": "original",
+            "signal_path": result["signal_path"],
+            "brief": result["brief"],
+        }
     signal = _signal_path(vault, signal_id)
     signal_markdown = signal.read_text(encoding="utf-8")
     self_paths = [
@@ -375,7 +456,8 @@ def save_decision(
     if not isinstance(signal_ids, list) or not signal_ids:
         raise ValueError("Decision signal_ids must be a non-empty list")
     normalized_signal_ids = [
-        _required_string({"value": value}, "value") for value in signal_ids
+        _canonical_signal_id(_required_string({"value": value}, "value"))
+        for value in signal_ids
     ]
     if len(set(normalized_signal_ids)) != len(normalized_signal_ids):
         raise ValueError("Decision signal_ids must not contain duplicates")
@@ -386,6 +468,26 @@ def save_decision(
     reason = _required_string(decision, "reason")
     timestamp = _utc_now(now)
     execution_mode = _execution_mode(decision)
+    topic_id = decision.get("topic_id")
+    if topic_id is not None:
+        topic_id = _required_string({"value": topic_id}, "value")
+        from .topics import read_topic
+
+        _, topic, _ = read_topic(vault, topic_id)
+        if topic.get("status") != "active":
+            raise ValueError("Topic Card must be active")
+        if topic.get("suggested_mode") != "original":
+            raise ValueError("Topic Card must use suggested_mode='original'")
+        if execution_mode != "original":
+            raise ValueError("A Topic-linked Decision must use execution_mode='original'")
+        topic_signal_ids = topic.get("signal_ids")
+        if (
+            not isinstance(topic_signal_ids, list)
+            or any(not isinstance(signal_id, str) or not signal_id for signal_id in topic_signal_ids)
+            or len(set(topic_signal_ids)) != len(topic_signal_ids)
+            or sorted(normalized_signal_ids) != sorted(topic_signal_ids)
+        ):
+            raise ValueError("Topic Card signal_ids must exactly match the Decision signal_ids")
     quote_signal_id: str | None = None
     quote_properties: dict[str, object] | None = None
     quote_window_ends_at: str | None = None
@@ -495,6 +597,7 @@ def save_decision(
         f"input_fingerprint: {_json(fingerprint)}",
         f"verdict: {_json(verdict)}",
         f"execution_mode: {_json(execution_mode)}",
+        f"topic_id: {_json(topic_id)}",
         f"signal_ids: {_json(normalized_signal_ids)}",
         f"angle: {_json(angle)}",
         f"reason_code: {_json(reason_code)}",
@@ -639,6 +742,7 @@ def save_decision(
                 "id": existing_id,
                 "path": str(existing_path),
                 "verdict": existing_properties.get("verdict", verdict),
+                "topic_id": existing_properties.get("topic_id"),
                 "signal_ids": existing_properties.get("signal_ids", normalized_signal_ids),
                 "reused": True,
             }
@@ -653,5 +757,6 @@ def save_decision(
         "id": decision_id,
         "path": str(path),
         "verdict": verdict,
+        "topic_id": topic_id,
         "signal_ids": normalized_signal_ids,
     }

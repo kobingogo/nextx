@@ -11,6 +11,8 @@ CONTRACT_FILES = {
     "collector": "collector-envelope.v1.json",
     "analysis": "analysis-input.v1.json",
     "triage": "triage-input.v1.json",
+    "cluster": "cluster-input.v1.json",
+    "topic": "topic-input.v1.json",
     "decision": "decision-input.v1.json",
     "artifact": "artifact-input.v1.json",
     "outcome": "outcome-input.v1.json",

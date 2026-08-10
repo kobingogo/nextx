@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nextx.local/schemas/topic-input.v1.json",
+  "title": "NextX Topic Card Input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "account_key", "cluster_id", "status", "suggested_mode", "display_title", "proposition", "content_lane", "target_reader", "takeaway", "value_type", "primary_platform", "secondary_platform", "recommended_angle", "title_directions", "quality_gates", "ip_dimensions", "traffic_dimensions", "ip_band", "traffic_band", "decision_class", "why_worth_doing", "evidence", "counterpoint", "evidence_to_strengthen", "max_risk", "confidence", "compliance", "action_signal_id", "revisit_at", "notes"],
+  "properties": {
+    "schema_version": {"const": 1}, "account_key": {"const": "primary"},
+    "cluster_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "status": {"enum": ["active", "parked", "closed"]},
+    "suggested_mode": {"enum": ["original", "quote", "reply", "observe"]},
+    "display_title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "proposition": {"type": "string", "minLength": 1, "maxLength": 500},
+    "content_lane": {"enum": ["builder_core", "ai_productivity", "ai_content", "adjacent_exploration"]},
+    "target_reader": {"type": "string", "minLength": 1, "maxLength": 600},
+    "takeaway": {"type": "string", "minLength": 1, "maxLength": 600},
+    "value_type": {"type": "string", "minLength": 1, "maxLength": 100},
+    "primary_platform": {"type": "string", "minLength": 1, "maxLength": 100},
+    "secondary_platform": {"type": ["string", "null"], "maxLength": 100},
+    "recommended_angle": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "title_directions": {"type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 300}},
+    "quality_gates": {"type": "object", "additionalProperties": false, "required": ["human", "useful", "timely", "identity_leverage"], "properties": {"human": {"type": "string", "minLength": 1}, "useful": {"type": "string", "minLength": 1}, "timely": {"type": "string", "minLength": 1}, "identity_leverage": {"type": "string", "minLength": 1}}},
+    "ip_dimensions": {"type": "object", "additionalProperties": false, "required": ["differentiation", "depth", "perspective", "clarity", "courage", "shareability"], "properties": {"differentiation": {"enum": [0, 1]}, "depth": {"enum": [0, 1]}, "perspective": {"enum": [0, 1]}, "clarity": {"enum": [0, 1]}, "courage": {"enum": [0, 1]}, "shareability": {"enum": [0, 1]}}},
+    "traffic_dimensions": {"type": "object", "additionalProperties": false, "required": ["benefit_visibility", "hook_strength", "asset_promise", "actionability"], "properties": {"benefit_visibility": {"type": "integer", "minimum": 1, "maximum": 5}, "hook_strength": {"type": "integer", "minimum": 1, "maximum": 5}, "asset_promise": {"type": "integer", "minimum": 1, "maximum": 5}, "actionability": {"type": "integer", "minimum": 1, "maximum": 5}}},
+    "ip_band": {"enum": ["S", "A", "B", "C"]}, "traffic_band": {"enum": ["strong_hook", "good", "steady", "weak"]}, "decision_class": {"enum": ["compound", "solution", "cognitive", "marginal"]},
+    "why_worth_doing": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "evidence": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object", "additionalProperties": false, "required": ["signal_id", "quote", "role", "translation_status"], "properties": {"signal_id": {"type": "string", "minLength": 1, "maxLength": 256}, "quote": {"type": "string", "minLength": 1, "maxLength": 1000}, "role": {"enum": ["support", "counter"]}, "translation_status": {"enum": ["original", "inference"]}}}},
+    "counterpoint": {"type": "string", "minLength": 1, "maxLength": 1000}, "evidence_to_strengthen": {"type": "string", "minLength": 1, "maxLength": 1000}, "max_risk": {"type": "string", "minLength": 1, "maxLength": 1000}, "confidence": {"enum": ["high", "medium", "low"]},
+    "compliance": {"type": "object", "additionalProperties": false, "required": ["band", "reason", "mitigation"], "properties": {"band": {"enum": ["green", "yellow", "red"]}, "reason": {"type": "string", "minLength": 1, "maxLength": 1000}, "mitigation": {"type": "string", "maxLength": 1000}}},
+    "action_signal_id": {"type": ["string", "null"], "maxLength": 256}, "revisit_at": {"type": ["string", "null"], "format": "date-time"}, "notes": {"type": "string", "minLength": 1, "maxLength": 2000}
+  },
+  "allOf": [
+    {"if": {"properties": {"compliance": {"properties": {"band": {"const": "red"}}, "required": ["band"]}}, "required": ["compliance"]}, "then": {"properties": {"status": {"not": {"const": "active"}}}}},
+    {"if": {"properties": {"compliance": {"properties": {"band": {"const": "yellow"}}, "required": ["band"]}}, "required": ["compliance"]}, "then": {"properties": {"compliance": {"properties": {"mitigation": {"minLength": 1}}}}}},
+    {"if": {"properties": {"suggested_mode": {"enum": ["quote", "reply"]}}, "required": ["suggested_mode"]}, "then": {"properties": {"action_signal_id": {"type": "string", "minLength": 1}}}}
+  ]
+}
