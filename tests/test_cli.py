@@ -171,6 +171,14 @@ class CLITests(unittest.TestCase):
                     "schema_version": 1, "account_key": "primary", "signal_id": signal_id, "display_title": "Ready CLI Signal", "language": "en", "content_lane": "builder_core", "topic_labels": ["AI"], "triage_status": "ready", "recommended_action": "topic", "triage_factors": {"reader_fit": 5, "evidence": 5, "value_add": 5, "urgency": 5}, "triage_confidence": "high", "summary": "Ready.", "target_reader": "Builders", "why_relevant": "Relevant.", "value_add": "Useful.", "risk": "Small sample.", "deep_dive": False, "reason_codes": ["fit"],
                 }, now=now)
 
+            patchers = {
+                name: patch(f"nextx.cli.{name}", side_effect=AssertionError(f"{name} must not run"))
+                for name in ("fetch_bookmarks", "sync_bookmarks", "ingest_signals", "save_artifact", "mark_review_ready", "confirm_publish", "record_published")
+            }
+            blocked = {name: patcher.start() for name, patcher in patchers.items()}
+            for patcher in patchers.values():
+                self.addCleanup(patcher.stop)
+
             brief_code, brief_stdout, brief_stderr = run_cli(["cluster-brief", "--vault", tmp])
             self.assertEqual((brief_code, brief_stderr), (0, ""))
             cluster_payload = {
@@ -214,6 +222,9 @@ class CLITests(unittest.TestCase):
             self.assertTrue((vault / "04. Views" / "Topics" / "Topic Clusters.md").is_file())
             self.assertTrue((vault / "04. Views" / "Topics" / "Topic Cards.md").is_file())
             self.assertEqual(list((vault / "03. Artifact").glob("*.md")), [])
+            for name, blocked_call in blocked.items():
+                with self.subTest(blocked_call=name):
+                    blocked_call.assert_not_called()
 
     def test_argument_errors_are_structured_json(self):
         code, stdout, stderr = run_cli(["not-a-command"])
