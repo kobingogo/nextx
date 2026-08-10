@@ -7,7 +7,7 @@ from nextx.signals import add_manual_signal, ingest_signals, signal_path
 from nextx.records import update_frontmatter
 from nextx.decisions import save_decision
 from nextx.vault import atomic_write_text, init_vault
-from nextx.views import render_quote_sprint, render_today
+from nextx.views import render_growth_loop, render_quote_sprint, render_today
 
 
 BASE = datetime(2026, 8, 7, 12, 0, tzinfo=timezone.utc)
@@ -25,7 +25,7 @@ def collector_payload(count=14):
                 "author_handle": author,
                 "published_at": (BASE + timedelta(minutes=index)).isoformat(),
                 "text": f"Signal {index}",
-                "metrics": {"views": index * 10},
+                "metrics": {"views": 10_000 + index * 10},
                 "media": [],
                 "source_confidence": "high",
                 "discovery_reason": "test",
@@ -45,7 +45,7 @@ class ViewTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             vault = Path(tmp)
             payload = collector_payload(1)
-            payload["items"][0]["metrics"] = {"views": 10, "likes": 2}
+            payload["items"][0]["metrics"] = {"views": 10000, "likes": 2}
             ingest_signals(vault, payload, collector="grok-build", now=BASE)
             update_frontmatter(
                 signal_path(vault, "x:5000"),
@@ -63,9 +63,68 @@ class ViewTests(unittest.TestCase):
             self.assertIn("|可读的快速判断标题]]", view)
             self.assertIn("建议：topic", view)
             self.assertIn("判断分：87", view)
-            self.assertIn("指标：views 10，likes 2", view)
+            self.assertIn("指标：views 10000，likes 2", view)
             self.assertIn("与本周增长目标直接相关。", view)
             self.assertNotIn("{'views': 10, 'likes': 2}", view)
+
+    def test_today_excludes_stale_and_low_reach_candidates(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = collector_payload(2)
+            payload["items"][0]["published_at"] = (BASE - timedelta(hours=25)).isoformat()
+            payload["items"][0]["metrics"] = {"views": 10000}
+            payload["items"][1]["published_at"] = (BASE + timedelta(hours=1)).isoformat()
+            payload["items"][1]["metrics"] = {"views": 999, "likes": 1}
+            ingest_signals(vault, payload, collector="grok-build", now=BASE)
+
+            result = render_today(vault, now=BASE + timedelta(hours=2))
+
+            self.assertEqual(result["selected_ids"], [])
+
+    def test_today_keeps_high_engagement_post_below_view_threshold(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = collector_payload(1)
+            payload["items"][0]["metrics"] = {"views": 100, "likes": 99, "replies": 1}
+            ingest_signals(vault, payload, collector="grok-build", now=BASE)
+
+            result = render_today(vault, now=BASE + timedelta(hours=1))
+
+            self.assertEqual(result["selected_ids"], ["x:5000"])
+
+    def test_quote_sprint_requires_recent_reachable_post(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = collector_payload(2)
+            payload["retrieved_at"] = (BASE + timedelta(hours=2)).isoformat()
+            for item in payload["items"]:
+                item.update(
+                    {
+                        "quote_candidate": True,
+                        "quote_window_ends_at": (BASE + timedelta(hours=12)).isoformat(),
+                        "metrics": {"views": 10000},
+                    }
+                )
+            payload["items"][0]["published_at"] = (BASE - timedelta(hours=25)).isoformat()
+            payload["items"][1]["published_at"] = (BASE - timedelta(hours=13)).isoformat()
+            ingest_signals(vault, payload, collector="grok-build", now=BASE)
+
+            result = render_quote_sprint(vault, now=BASE + timedelta(hours=1))
+
+            self.assertEqual(result["selected_ids"], ["x:5001"])
+
+    def test_growth_loop_recommends_collection_when_only_stale_candidates_exist(self):
+        with TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            payload = collector_payload(1)
+            payload["items"][0]["published_at"] = (BASE - timedelta(hours=25)).isoformat()
+            payload["items"][0]["metrics"] = {"views": 10000}
+            ingest_signals(vault, payload, collector="grok-build", now=BASE)
+            init_vault(vault)
+
+            result = render_growth_loop(vault, now=BASE + timedelta(hours=2))
+
+            self.assertEqual(result["regular_candidate_count"], 0)
 
     def test_today_card_keeps_legacy_untriaged_fallbacks(self):
         with TemporaryDirectory() as tmp:

@@ -14,6 +14,12 @@ from .self_model import growth_strategy, self_readiness
 from .vault import atomic_write_text, init_vault, vault_lock
 
 
+TODAY_MAX_AGE = timedelta(hours=24)
+QUOTE_MAX_AGE = timedelta(hours=24)
+MIN_VIEWS = 10_000
+MIN_ENGAGEMENT = 100
+
+
 def _write_view(vault: Path, path: Path, content: str) -> None:
     with vault_lock(vault):
         atomic_write_text(path, content)
@@ -42,6 +48,29 @@ def _parse_time(value: object) -> datetime | None:
     except ValueError:
         return None
     return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+
+
+def _is_current_reachable_signal(
+    properties: dict[str, object], now: datetime, max_age: timedelta
+) -> bool:
+    published = _parse_time(properties.get("published_at"))
+    if published is None or published > now or now - published > max_age:
+        return False
+    metrics = properties.get("metrics")
+    values = metrics if isinstance(metrics, dict) else {}
+    views = values.get("views", 0)
+    engagement = sum(
+        float(values.get(key, 0))
+        for key in ("likes", "replies", "reposts", "bookmarks")
+        if isinstance(values.get(key, 0), (int, float))
+        and not isinstance(values.get(key, 0), bool)
+        and values.get(key, 0) >= 0
+    )
+    return (
+        isinstance(views, (int, float))
+        and not isinstance(views, bool)
+        and views >= MIN_VIEWS
+    ) or engagement >= MIN_ENGAGEMENT
 
 
 def _signal_queue_state(
@@ -252,6 +281,8 @@ def render_quote_sprint(
         path, properties = record
         if properties.get("quote_candidate") is not True:
             continue
+        if not _is_current_reachable_signal(properties, timestamp, QUOTE_MAX_AGE):
+            continue
         deadline = _parse_time(properties.get("quote_window_ends_at"))
         if deadline is None or deadline <= timestamp:
             expired_count += 1
@@ -341,6 +372,8 @@ def render_reply_sprint(
     pool: list[tuple[Path, dict[str, object]]] = []
     for path, properties in _records(vault / "01. Signal", "signal"):
         if properties.get("reply_candidate") is not True:
+            continue
+        if not _is_current_reachable_signal(properties, timestamp, TODAY_MAX_AGE):
             continue
         deadline = _parse_time(properties.get("reply_window_ends_at"))
         if deadline is None or deadline <= timestamp:
@@ -488,6 +521,7 @@ def render_growth_loop(vault: Path, *, now: datetime | None = None) -> dict[str,
         if properties.get("reply_candidate") is True
         and str(properties.get("id")) not in resolved_signals
         and (_parse_time(properties.get("reply_window_ends_at")) or timestamp) > timestamp
+        and _is_current_reachable_signal(properties, timestamp, TODAY_MAX_AGE)
     ]
     quote_candidates = [
         properties
@@ -495,6 +529,7 @@ def render_growth_loop(vault: Path, *, now: datetime | None = None) -> dict[str,
         if properties.get("quote_candidate") is True
         and str(properties.get("id")) not in resolved_signals
         and (_parse_time(properties.get("quote_window_ends_at")) or timestamp) > timestamp
+        and _is_current_reachable_signal(properties, timestamp, QUOTE_MAX_AGE)
     ]
     regular_candidates = [
         properties
@@ -503,6 +538,7 @@ def render_growth_loop(vault: Path, *, now: datetime | None = None) -> dict[str,
         and properties.get("bookmark_active") is not False
         and properties.get("quote_candidate") is not True
         and properties.get("reply_candidate") is not True
+        and _is_current_reachable_signal(properties, timestamp, TODAY_MAX_AGE)
     ]
     regular_candidates.sort(
         key=lambda properties: (_priority(properties, timestamp)[0], _timestamp(properties)),
@@ -691,6 +727,10 @@ def render_today(
         and record[1].get("bookmark_active") is not False
         and record[1].get("quote_candidate") is not True
         and record[1].get("reply_candidate") is not True
+        and (
+            record[1].get("signal_type") == "manual"
+            or _is_current_reachable_signal(record[1], timestamp, TODAY_MAX_AGE)
+        )
     ]
     pending.sort(key=lambda record: _timestamp(record[1]), reverse=True)
     manual: list[tuple[Path, dict[str, object]]] = []

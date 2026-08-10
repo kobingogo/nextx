@@ -59,7 +59,7 @@ def reply_envelope() -> dict[str, object]:
                 "author_handle": "alpha",
                 "published_at": "2026-08-08T05:00:00+00:00",
                 "text": "Most creator workflows fail because nobody records what changed after publishing.",
-                "metrics": {"views": 1200, "likes": 30, "replies": 8, "reposts": 4, "bookmarks": 6},
+                "metrics": {"views": 10_000, "likes": 30, "replies": 8, "reposts": 4, "bookmarks": 6},
                 "media": [],
                 "source_confidence": "high",
                 "discovery_reason": "开放讨论了复盘缺口，可用具体的最小闭环帮助相邻读者判断。",

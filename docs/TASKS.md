@@ -53,6 +53,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | NX-028 | v0.2-rc 稳定化 | 修复 Signal 路径碰撞、Windows 锁探测、Outcome 时间与审计语义、跨账号投影、Reply 队列、收藏完整快照、独立安装依赖与升级路径 | P0 | 已完成 | `v0.3.0-alpha.2`；143 项回归、隔离 wheel 安装、构建隔离和 Skill 校验均已验证 | 进入 NX-B02 的真实三端 Agent 验收 |
 | NX-029 | v0.3 决策系统 | 让 Growth Strategy 驱动 Discovery/Authority/Conversion 的下一步排序；建立可计算北极星时延、到期 Outcome、证据/反例约束的 repeat/alter/stop Playbook；完善小白对话引导 | P0 | 已完成 | `v0.3.0-alpha.2`；Growth Planner、Conversion 冷启动、review-ready 北极星、独立样本与格式/写入契约回归均通过 | 用真实运营样本校正指标阈值与推荐质量 |
+| NX-030 | 升级体验 | 增加 `nextx upgrade`，复用 canonical 安装器更新隔离 runtime、依赖和三端 Agent Skill，并提供 dry-run/冲突覆盖选项 | P1 | 已完成 | [CLI](../src/nextx/cli.py)、[Skill](../skills/nextx/SKILL.md)、升级回归测试；本机 `nextx upgrade --dry-run` 通过 | 网络可用时验证独立安装的真实缓存刷新 |
 
 ## 受阻
 
@@ -96,3 +97,4 @@
 | 2026-08-09 | NX-028 | 验证远端发行物可复现安装 | 从 GitHub 的 `v0.3.0-alpha.1` 新克隆到临时目录，隔离 runtime 安装成功；`nextx version` 返回 `0.3.0`，`setup` 与渐进式 `next-step` 均成功 |
 | 2026-08-09 | NX-028、NX-029 | 修复最新审核 P0/P1 并发布 Alpha 2 | `v0.3.0-alpha.2`；143 项回归、隔离构建/安装、Bookmark→Decision、Outcome、独立样本、Conversion、Artifact 契约、写锁与 Skill 语义校验通过；补齐 Windows HOME/UTF-8/Skill 镜像兼容 |
 | 2026-08-09 | NX-030 | 完成 Signal 可用性基础 | 稳定记录索引、可读且冲突安全的文件名、版本化 Quick Triage、策略陈旧检测、分类 Inbox、可重建 Views 与只预览的迁移流程均有自动化和临时 Vault 验证 |
+| 2026-08-09 | NX-030 | 增加 `nextx upgrade` 一键升级入口 | CLI 复用 canonical 安装器；支持 `--dry-run` 与 `--force-agent-skills`；更新 README、新手指南、运维手册与 Skill 路由 |

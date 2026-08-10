@@ -56,6 +56,14 @@ nextx doctor --no-smoke
 nextx readiness
 ```
 
+源码或 Skill 更新后，在任一已安装的 NextX CLI 上运行：
+
+```bash
+nextx upgrade
+```
+
+它会复用 canonical 安装器，重新安装当前源码的隔离运行时并同步 Codex、Claude Code、Grok Build 的 NextX Skill。只检查不写入时使用 `nextx upgrade --dry-run`；遇到同名非 NextX Skill 冲突时，只有确认要替换才加 `--force-agent-skills`。源码 checkout 需要先在仓库目录执行 `git pull --ff-only origin main`，再运行升级；独立安装会按已安装的 repository/ref 刷新源码缓存。
+
 Agent 应读取安装器 JSON 的 `nextx` 字段；若 `command_exposed` 为 false，则使用 `executable`，不要假设 PATH 已经更新。
 
 源码开发环境仍可手动安装：

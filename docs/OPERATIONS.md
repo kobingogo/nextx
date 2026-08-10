@@ -93,6 +93,14 @@ Codex、Claude Code、Grok Build 都调用这一个入口，不维护各自的�
 ./install-nextx --json
 ```
 
+已安装环境的日常升级入口是：
+
+```bash
+nextx upgrade
+```
+
+`nextx upgrade` 复用同一份 `skills/nextx/scripts/bootstrap.py` 安装逻辑，重新安装隔离运行时并同步 Agent Skill；`--dry-run` 只输出计划，`--force-agent-skills` 仅用于用户确认后的同名 Skill 冲突。源码 checkout 应先 `git pull --ff-only origin main`，独立安装则刷新当前 repository/ref 的源码缓存。
+
 安装器会：
 
 1. 选择当前可用的 Python 3.11+；

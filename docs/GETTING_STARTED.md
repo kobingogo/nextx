@@ -100,6 +100,16 @@ nextx doctor --no-smoke
 nextx readiness
 ```
 
+### 更新 NextX
+
+每次拉取新版本后，直接运行：
+
+```bash
+nextx upgrade
+```
+
+该命令会重新安装隔离运行时、依赖和 canonical Agent Skill，并保留现有 Vault。源码 checkout 先执行 `git pull --ff-only origin main`；独立安装由安装器刷新其 repository/ref 对应的源码缓存。可先用 `nextx upgrade --dry-run` 查看计划，Skill 冲突只有在明确确认后才使用 `--force-agent-skills`。
+
 `setup` 会创建 Vault、Self 模板和本地配置。重复执行安全，不会覆盖你在 Markdown 中写的内容。
 
 若想用现有 Obsidian 目录，只在首次配置时改一次路径：

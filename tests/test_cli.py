@@ -49,6 +49,35 @@ class CLITests(unittest.TestCase):
 
         self.assertEqual(results[0], results[1])
 
+    @patch("nextx.cli.subprocess.run")
+    def test_upgrade_reuses_installed_bootstrap_and_current_runtime(self, run):
+        run.return_value.returncode = 0
+        run.return_value.stdout = '{"ok": true, "command": "bootstrap", "upgrade_requested": true}'
+        run.return_value.stderr = ""
+
+        code, stdout, stderr = run_cli(["upgrade"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        result = json.loads(stdout)
+        self.assertEqual(result["command"], "upgrade")
+        self.assertTrue(result["upgrade_requested"])
+        command = run.call_args.args[0]
+        self.assertIn("skills/nextx/scripts/install-nextx", str(command[0]))
+        self.assertIn("--upgrade", command)
+
+    @patch("nextx.cli.subprocess.run")
+    def test_upgrade_returns_structured_error_when_installer_fails(self, run):
+        run.return_value.returncode = 1
+        run.return_value.stdout = ""
+        run.return_value.stderr = "dependency installation failed"
+
+        code, stdout, stderr = run_cli(["upgrade"])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout, "")
+        self.assertIn("dependency installation failed", stderr)
+
     def test_version_returns_a_structured_installed_version(self):
         code, stdout, stderr = run_cli(["version"])
 
@@ -177,6 +206,14 @@ class CLITests(unittest.TestCase):
 
     def test_today_renders_obisidian_view(self):
         with TemporaryDirectory() as tmp:
+            fixture = Path(tmp) / "today-signals.json"
+            payload = json.loads(GROK_FIXTURE.read_text(encoding="utf-8"))
+            collected_at = datetime.now(timezone.utc).replace(microsecond=0)
+            payload["retrieved_at"] = collected_at.isoformat()
+            for index, item in enumerate(payload["items"]):
+                item["published_at"] = (collected_at - timedelta(minutes=index + 1)).isoformat()
+                item["metrics"] = {"views": 10_000}
+            fixture.write_text(json.dumps(payload), encoding="utf-8")
             run_cli(
                 [
                     "collect",
@@ -185,7 +222,7 @@ class CLITests(unittest.TestCase):
                     "--source",
                     "grok",
                     "--input-json",
-                    str(GROK_FIXTURE),
+                    str(fixture),
                 ]
             )
 
@@ -614,6 +651,7 @@ class CLITests(unittest.TestCase):
             payload["items"][0].update(
                 {
                     "published_at": (collected_at - timedelta(hours=1)).isoformat(),
+                    "metrics": {"views": 10_000},
                     "quote_candidate": True,
                     "quote_window_ends_at": (collected_at + timedelta(hours=6)).isoformat(),
                 }
@@ -651,6 +689,7 @@ class CLITests(unittest.TestCase):
             payload["items"][0].update(
                 {
                     "published_at": (collected_at - timedelta(hours=1)).isoformat(),
+                    "metrics": {"views": 10_000},
                     "reply_candidate": True,
                     "reply_window_ends_at": (collected_at + timedelta(hours=6)).isoformat(),
                 }

@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 from typing import Sequence
 
@@ -74,6 +75,18 @@ def _parser() -> argparse.ArgumentParser:
     setup.add_argument("--vault", type=Path)
     setup.add_argument("--runtime", type=Path)
     setup.add_argument("--yes", action="store_true", help="Run non-interactively")
+
+    upgrade = subparsers.add_parser(
+        "upgrade", help="Refresh the installed NextX runtime and Agent Skill"
+    )
+    upgrade.add_argument(
+        "--dry-run", action="store_true", help="Report the upgrade without writing files"
+    )
+    upgrade.add_argument(
+        "--force-agent-skills",
+        action="store_true",
+        help="Replace an unmanaged same-name Agent Skill only when explicitly requested",
+    )
 
     config = subparsers.add_parser("config", help="Show resolved local configuration")
     config.add_argument("--show", action="store_true", help="Show resolved configuration")
@@ -405,6 +418,70 @@ def _next_step_command(vault: Path | None) -> dict[str, object]:
     }
 
 
+def _upgrade_command(arguments: argparse.Namespace) -> dict[str, object]:
+    """Re-run the canonical installer against the currently loaded source tree.
+
+    The launcher used by the installer points at the same source tree that contains
+    this module, so resolving the installer relative to ``__file__`` keeps source
+    checkouts and standalone Skill source caches on one upgrade path.
+    """
+    source_root = Path(__file__).resolve().parents[2]
+    installer = source_root / "skills" / "nextx" / "scripts" / "install-nextx"
+    if not installer.is_file():
+        raise RuntimeError(
+            "NextX upgrade script is unavailable in this installation; "
+            "run ./install-nextx from the NextX source checkout"
+        )
+
+    command = [str(installer), "--upgrade"]
+    if arguments.dry_run:
+        command.append("--dry-run")
+    if arguments.force_agent_skills:
+        command.append("--force-agent-skills")
+
+    runtime = Path(sys.prefix)
+    if (runtime / "pyvenv.cfg").is_file():
+        command.extend(("--runtime", str(runtime)))
+
+    invocation = Path(sys.argv[0]).expanduser()
+    expected_name = "nextx.cmd" if os.name == "nt" else "nextx"
+    if invocation.is_absolute() and invocation.exists():
+        try:
+            expected = Path(sys.executable).with_name(expected_name).resolve()
+            if invocation.resolve() == expected:
+                command.extend(("--bin-dir", str(invocation.parent)))
+        except OSError:
+            pass
+
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "installer failed").strip()
+        raise RuntimeError(f"NextX upgrade failed: {detail[:1000]}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("NextX upgrade installer returned invalid JSON") from error
+    if not isinstance(payload, dict) or payload.get("ok") is not True:
+        raise RuntimeError("NextX upgrade installer returned an unsuccessful result")
+    return {
+        "ok": True,
+        "command": "upgrade",
+        "upgrade_requested": True,
+        "installer": payload,
+        **{
+            key: payload[key]
+            for key in ("version", "source", "runtime", "agent_skills")
+            if key in payload
+        },
+    }
+
+
 def _doctor_command(vault: Path | None, *, smoke: bool) -> tuple[dict[str, object], int]:
     vault = resolve_vault(vault)
     vault_ready = vault.is_dir() and os.access(vault, os.W_OK)
@@ -587,6 +664,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             code = 0
         elif arguments.command == "setup":
             result = setup_vault(arguments.vault, runtime=arguments.runtime)
+            code = 0
+        elif arguments.command == "upgrade":
+            result = _upgrade_command(arguments)
             code = 0
         elif arguments.command == "config":
             result = config_snapshot()
